@@ -25,6 +25,7 @@ func IsReservedName(name string) bool {
 }
 
 var editFlag bool
+var rawFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "recall [filename]",
@@ -38,6 +39,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().BoolVarP(&editFlag, "edit", "e", false, "edit the specified file")
+	rootCmd.Flags().BoolVarP(&rawFlag, "raw", "r", false, "output unformatted markdown without ANSI styling")
 }
 
 func runRecall(cmd *cobra.Command, args []string) error {
@@ -46,6 +48,12 @@ func runRecall(cmd *cobra.Command, args []string) error {
 	}
 
 	filename := args[0]
+
+	// Mutual exclusivity check
+	if rawFlag && editFlag {
+		fmt.Fprintln(os.Stderr, "recall: --raw and --edit flags cannot be used together")
+		os.Exit(1)
+	}
 
 	// If -e flag is set, delegate to edit logic
 	if editFlag {
@@ -77,6 +85,12 @@ func runRecall(cmd *cobra.Command, args []string) error {
 
 	// Strip front-matter
 	_, body := frontmatter.Parse(content)
+
+	// Raw output: write body directly without rendering
+	if rawFlag {
+		os.Stdout.Write(body)
+		return nil
+	}
 
 	// Render the markdown
 	output, err := renderer.Render(body)
