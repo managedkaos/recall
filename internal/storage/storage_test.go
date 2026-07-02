@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/mjenkins/recall/internal/storage"
+	"github.com/managedkaos/recall/internal/storage"
 )
 
 func TestList_RegularFiles(t *testing.T) {

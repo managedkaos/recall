@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mjenkins/recall/internal/config"
-	"github.com/mjenkins/recall/internal/frontmatter"
-	"github.com/mjenkins/recall/internal/renderer"
-	"github.com/mjenkins/recall/internal/storage"
+	"github.com/managedkaos/recall/internal/config"
+	"github.com/managedkaos/recall/internal/frontmatter"
+	"github.com/managedkaos/recall/internal/renderer"
+	"github.com/managedkaos/recall/internal/storage"
 	"github.com/spf13/cobra"
 )
 

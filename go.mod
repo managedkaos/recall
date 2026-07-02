@@ -1,4 +1,4 @@
-module github.com/mjenkins/recall
+module github.com/managedkaos/recall
 
 go 1.26.4
 

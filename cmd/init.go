@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mjenkins/recall/internal/config"
+	"github.com/managedkaos/recall/internal/config"
 	"github.com/spf13/cobra"
 )
 

@@ -1,18 +1,22 @@
 BINARY_NAME := recall
 BUILD_DIR := bin
-MODULE := github.com/mjenkins/recall
-
+MODULE := github.com/managedkaos/recall
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-# Default: build for current platform
+.PHONY: help
+help:
+	@echo coming soon
+
+.PHONY: all
+all: clean test build
+
 .PHONY: build
-build:
+build: ## Default: build for current platform
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -o $(BUILD_DIR)/$(BINARY_NAME) .
 
-# Build for all target platforms
 .PHONY: build-all
-build-all:
+build-all: ## Build for all target platforms
 	@mkdir -p $(BUILD_DIR)
 	@$(foreach platform,$(PLATFORMS),\
 		$(eval OS := $(word 1,$(subst /, ,$(platform))))\
@@ -22,12 +26,11 @@ build-all:
 		CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)$(EXT) . && \
 	) true
 
-# Run all tests
 .PHONY: test
-test:
-	go test ./...
+test: ## Run all tests
+	go test -v ./...
 
-# Remove build artifacts
 .PHONY: clean
-clean:
+clean: ## Remove build artifacts
 	rm -rf $(BUILD_DIR)
+

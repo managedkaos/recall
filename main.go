@@ -1,6 +1,6 @@
 package main
 
-import "github.com/mjenkins/recall/cmd"
+import "github.com/managedkaos/recall/cmd"
 
 func main() {
 	cmd.Execute()

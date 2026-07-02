@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/mjenkins/recall/internal/storage"
+	"github.com/managedkaos/recall/internal/storage"
 )
 
 // Result represents a single search match.

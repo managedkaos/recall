@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mjenkins/recall/internal/config"
+	"github.com/managedkaos/recall/internal/config"
 	"pgregory.net/rapid"
 )
 

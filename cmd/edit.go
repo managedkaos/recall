@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/mjenkins/recall/internal/config"
-	"github.com/mjenkins/recall/internal/storage"
+	"github.com/managedkaos/recall/internal/config"
+	"github.com/managedkaos/recall/internal/storage"
 	"github.com/spf13/cobra"
 )
 
