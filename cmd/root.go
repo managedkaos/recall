@@ -13,10 +13,11 @@ import (
 
 // reservedNames are subcommand names that cannot be used as filenames.
 var reservedNames = map[string]bool{
-	"edit":   true,
-	"list":   true,
-	"search": true,
-	"init":   true,
+	"edit":    true,
+	"list":    true,
+	"search":  true,
+	"init":    true,
+	"version": true,
 }
 
 // IsReservedName checks if a filename conflicts with a subcommand name.
