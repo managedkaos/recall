@@ -1,51 +1,29 @@
-name: Build release binaries
+name: Build and Release Binaries
 
 on:
-  release:
-    types: [published]
-
-permissions:
-  contents: write
+  push:
+    tags:
+      - 'v*' # Triggers on any tag starting with v (e.g., v1.0.0)
 
 jobs:
-  build-and-upload:
-    name: Build and attach release binaries
+  release:
     runs-on: ubuntu-latest
 
+    # Required to allow GitHub CLI to create releases and upload assets
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.26'
-
-      - name: Build all binaries
+      - name: Build Binaries
         run: |
           make build-all
 
-      - name: Show build artifacts
-        run: ls -la bin || true
-
-      - name: Upload release assets
+      - name: Create Release and Upload Binaries
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UPLOAD_URL: ${{ github.event.release.upload_url }}
         run: |
-          set -euo pipefail
-          if [ -z "${UPLOAD_URL:-}" ]; then
-            echo "No release upload_url found in event payload."
-            exit 1
-          fi
-          ASSET_UPLOAD_URL="${UPLOAD_URL%\{*}"
-          for f in bin/*; do
-            [ -f "$f" ] || continue
-            name=$(basename "$f")
-            echo "Uploading $name to release..."
-            curl -sSf \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$f" \
-              "${ASSET_UPLOAD_URL}?name=$name"
-          done
+          # Creates a release using the tag name (e.g., v1.0.0) and uploads all files from bin/
+          gh release create ${{ github.ref_name }} bin/* --title "Release ${{ github.ref_name }}" --generate-notes
