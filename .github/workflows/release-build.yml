@@ -38,6 +38,7 @@ jobs:
             echo "No release upload_url found in event payload."
             exit 1
           fi
+          ASSET_UPLOAD_URL="${UPLOAD_URL%\{*}"
           for f in bin/*; do
             [ -f "$f" ] || continue
             name=$(basename "$f")
@@ -46,5 +47,5 @@ jobs:
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @"$f" \
-              "$UPLOAD_URL?name=$name"
+              "${ASSET_UPLOAD_URL}?name=$name"
           done
