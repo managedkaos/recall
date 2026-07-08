@@ -12,24 +12,22 @@ on:
         default: ''
 
 jobs:
-  release:
+  build:
+    name: Build binaries
     runs-on: ubuntu-latest
-
-    # Required to allow GitHub CLI to create releases and upload assets
     permissions:
       contents: write
-
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6.5.0
         with:
           go-version: '1.26'
 
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5.1.0
         with:
           path: |
             ~/.cache/go-build
@@ -41,6 +39,39 @@ jobs:
       - name: Build Binaries
         run: |
           make build-all
+
+      - name: Show build artifacts
+        run: ls -la bin || true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bin
+          path: bin
+
+  test:
+    name: Test built binaries
+    needs: build
+    uses: ./.github/workflows/test-binaries.yml
+    with:
+      artifact_name: bin
+      binary_name: recall
+
+  release:
+    name: Create release
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: bin
+          path: bin
 
       - name: Create Release and Upload Binaries
         env:
