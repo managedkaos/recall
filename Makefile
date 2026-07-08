@@ -39,3 +39,10 @@ test: ## Run all tests
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf $(BUILD_DIR)
+
+.PHONY: install
+install: ## Install the binary to ~/.local/bin
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(HOME)/.local/bin
+	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	install -m 0755 $(BUILD_DIR)/$(BINARY_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
