@@ -1,9 +1,15 @@
-name: Build and Release Binaries
+name: Build and Release Binary
 
 on:
   push:
     tags:
       - 'v*' # Triggers on any tag starting with v (e.g., v1.0.0)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v1.2.3)'
+        required: true
+        default: ''
 
 jobs:
   release:
@@ -17,6 +23,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.26'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Build Binaries
         run: |
           make build-all
@@ -25,5 +46,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Creates a release using the tag name (e.g., v1.0.0) and uploads all files from bin/
-          gh release create ${{ github.ref_name }} bin/* --title "Release ${{ github.ref_name }}" --generate-notes
+          set -euo pipefail
+          TAG=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          if [ -z "${TAG:-}" ]; then
+            echo "Tag is empty; aborting."
+            exit 1
+          fi
+          echo "Creating release for $TAG and uploading bin/*"
+          gh release create "$TAG" bin/* --title "Release $TAG" --generate-notes
