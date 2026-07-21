@@ -14,8 +14,9 @@ import (
 var tagFlag string
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all recall files",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all recall files",
 	Long:  `List all recall files in the recall directory, sorted alphabetically. Use --tag to filter by tag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir, err := config.RecallDir()
