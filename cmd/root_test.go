@@ -239,3 +239,18 @@ func TestRawFlag_ShorthandRejectedOnSubcommands(t *testing.T) {
 		t.Errorf("expected 'unknown shorthand flag' error, got stderr: %q", stderr)
 	}
 }
+
+func TestLsAliasListsFiles(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "ls")
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	expected := "hello\nplain\n"
+	if stdout != expected {
+		t.Errorf("expected stdout %q, got %q", expected, stdout)
+	}
+}

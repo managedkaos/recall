@@ -51,3 +51,9 @@ func TestVersionReservedName(t *testing.T) {
 		t.Error("expected 'version' to be a reserved name")
 	}
 }
+
+func TestLsReservedName(t *testing.T) {
+	if !IsReservedName("ls") {
+		t.Error("expected 'ls' to be a reserved name")
+	}
+}
