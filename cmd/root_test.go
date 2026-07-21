@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,26 @@ func buildBinary(t *testing.T) string {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to build binary: %v\n%s", err, out)
+	}
+	return binPath
+}
+
+// buildBinaryWithMetadata compiles recall with ldflags for version metadata tests.
+func buildBinaryWithMetadata(t *testing.T) string {
+	t.Helper()
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "recall")
+	module := "github.com/managedkaos/recall"
+	ldflags := fmt.Sprintf(
+		"-X %s/cmd.Major=0 -X %s/cmd.Minor=1 -X %s/cmd.Patch=0 -X %s/cmd.GitBranch=test-branch -X %s/cmd.BuildDate=2026-07-21T12:00:00Z -X %s/cmd.BuildEnvironment=test",
+		module, module, module, module, module, module,
+	)
+
+	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".")
+	cmd.Dir = filepath.Join(getProjectRoot(t))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to build binary with metadata: %v\n%s", err, out)
 	}
 	return binPath
 }
@@ -252,5 +273,28 @@ func TestLsAliasListsFiles(t *testing.T) {
 	expected := "hello\nplain\n"
 	if stdout != expected {
 		t.Errorf("expected stdout %q, got %q", expected, stdout)
+	}
+}
+
+func TestVersionCommandShowsMetadata(t *testing.T) {
+	binPath := buildBinaryWithMetadata(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "version")
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	for _, want := range []string{
+		"recall version 0.1.0",
+		"Go version:",
+		"Platform:",
+		"Environment:    test",
+		"Branch:         test-branch",
+		"Module:",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("expected output to contain %q, got:\n%s", want, stdout)
+		}
 	}
 }

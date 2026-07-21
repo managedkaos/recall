@@ -7,7 +7,13 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 VERSION_MAJOR := $(shell grep '^major:' version.yml | awk '{print $$2}')
 VERSION_MINOR := $(shell grep '^minor:' version.yml | awk '{print $$2}')
 VERSION_PATCH := $(shell grep '^patch:' version.yml | awk '{print $$2}')
-LDFLAGS := -ldflags "-X $(MODULE)/cmd.Major=$(VERSION_MAJOR) -X $(MODULE)/cmd.Minor=$(VERSION_MINOR) -X $(MODULE)/cmd.Patch=$(VERSION_PATCH)"
+
+# Build metadata (overridable via environment, e.g. in CI)
+GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+BUILD_ENV  ?= local ($(shell uname -s))
+
+LDFLAGS := -ldflags "-X '$(MODULE)/cmd.Major=$(VERSION_MAJOR)' -X '$(MODULE)/cmd.Minor=$(VERSION_MINOR)' -X '$(MODULE)/cmd.Patch=$(VERSION_PATCH)' -X '$(MODULE)/cmd.GitBranch=$(GIT_BRANCH)' -X '$(MODULE)/cmd.BuildDate=$(BUILD_DATE)' -X '$(MODULE)/cmd.BuildEnvironment=$(BUILD_ENV)'"
 
 .PHONY: help
 help:
