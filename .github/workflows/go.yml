@@ -48,5 +48,5 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: Build
-      run: go build -v ./...
+      run: make build
 

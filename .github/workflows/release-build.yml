@@ -37,8 +37,11 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Build Binaries
-        run: |
-          make build-all
+        env:
+          BUILD_ENV: GitHub Actions
+          GIT_BRANCH: ${{ github.ref_name }}
+          BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+        run: make build-all
 
       - name: Show build artifacts
         run: ls -la bin || true

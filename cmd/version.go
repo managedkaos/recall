@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/managedkaos/recall/internal/buildinfo"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,9 @@ var (
 	Major   string
 	Minor   string
 	Patch   string
+	GitBranch         string
+	BuildEnvironment  string
+	BuildDate         string
 )
 
 var versionCmd = &cobra.Command{
@@ -27,15 +31,13 @@ func init() {
 }
 
 func runVersion(cmd *cobra.Command, args []string) error {
-	fmt.Printf("recall version %s\n", formatVersion(Major, Minor, Patch))
+	meta := buildinfo.Collect(Major, Minor, Patch, GitBranch, BuildEnvironment, BuildDate)
+	fmt.Print(meta.String())
 	return nil
 }
 
 // formatVersion constructs the semantic version string from components.
 // If any component is empty (ldflags not provided), returns "unknown".
 func formatVersion(major, minor, patch string) string {
-	if major == "" || minor == "" || patch == "" {
-		return "unknown"
-	}
-	return major + "." + minor + "." + patch
+	return buildinfo.FormatVersion(major, minor, patch)
 }
