@@ -85,6 +85,12 @@ Search across all files for a string (case-insensitive):
 recall search "docker compose"
 ```
 
+You can also use the `-s` flag as a shorthand, equivalent to the `search` subcommand:
+
+```bash
+recall -s "docker compose"
+```
+
 ### Help
 
 ```bash

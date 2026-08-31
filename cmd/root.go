@@ -28,6 +28,7 @@ func IsReservedName(name string) bool {
 
 var editFlag bool
 var rawFlag bool
+var searchFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "recall [filename]",
@@ -42,11 +43,23 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().BoolVarP(&editFlag, "edit", "e", false, "edit the specified file")
 	rootCmd.Flags().BoolVarP(&rawFlag, "raw", "r", false, "output unformatted markdown without ANSI styling")
+	rootCmd.Flags().BoolVarP(&searchFlag, "search", "s", false, "search all recall files for the given query")
 }
 
 func runRecall(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
+	}
+
+	// Search-edit mutual exclusivity
+	if searchFlag && editFlag {
+		fmt.Fprintln(os.Stderr, "recall: --search and --edit flags cannot be used together")
+		os.Exit(1)
+	}
+
+	// If -s flag is set, delegate to search logic
+	if searchFlag {
+		return runSearch(args[0])
 	}
 
 	filename := args[0]
