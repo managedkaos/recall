@@ -6,30 +6,15 @@ import (
 
 	"github.com/managedkaos/recall/internal/config"
 	"github.com/managedkaos/recall/internal/search"
-	"github.com/spf13/cobra"
 )
-
-var searchCmd = &cobra.Command{
-	Use:   "search <query>",
-	Short: "Search all recall files for a string",
-	Long:  `Search all recall files in the recall directory for a case-insensitive substring match.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			fmt.Fprintln(os.Stderr, "recall: search requires a query argument")
-			os.Exit(1)
-		}
-
-		return runSearch(args[0])
-	},
-}
 
 // runSearch performs a case-insensitive search across all recall files for
 // query and prints the results to stdout in the standard
 // "filename:linenumber:linecontent" format, grouping matches by file and
 // separating file groups with a line containing "----------". Empty results
 // produce no output. Directory-resolution and search errors are printed to
-// stderr and cause a non-zero exit. This helper is shared by the "search"
-// subcommand and the root command's --search / -s flag.
+// stderr and cause a non-zero exit. This helper is invoked by the root
+// command's --search / -s flag.
 func runSearch(query string) error {
 	dir, err := config.RecallDir()
 	if err != nil {
@@ -62,8 +47,4 @@ func runSearch(query string) error {
 	}
 
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(searchCmd)
 }

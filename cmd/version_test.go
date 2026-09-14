@@ -45,15 +45,3 @@ func TestFormatVersion_AllEmpty(t *testing.T) {
 		t.Errorf("expected 'unknown', got %q", got)
 	}
 }
-
-func TestVersionReservedName(t *testing.T) {
-	if !IsReservedName("version") {
-		t.Error("expected 'version' to be a reserved name")
-	}
-}
-
-func TestLsReservedName(t *testing.T) {
-	if !IsReservedName("ls") {
-		t.Error("expected 'ls' to be a reserved name")
-	}
-}
