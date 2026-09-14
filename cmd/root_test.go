@@ -47,7 +47,6 @@ func buildBinaryWithMetadata(t *testing.T) string {
 // getProjectRoot returns the project root directory.
 func getProjectRoot(t *testing.T) string {
 	t.Helper()
-	// Walk up from the test file's location to find go.mod
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("cannot get working directory: %v", err)
@@ -99,6 +98,82 @@ func runRecall(t *testing.T, binPath, recallDir string, args ...string) (stdout,
 	return stdoutBuf.String(), stderrBuf.String(), exitCode
 }
 
+// --- Default render path -----------------------------------------------------
+
+func TestRender_ValidFile(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "hello")
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Hello, world!") {
+		t.Errorf("expected rendered output containing 'Hello, world!', got %q", stdout)
+	}
+}
+
+func TestRender_NonExistentFileExits1Silently(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "nonexistent")
+
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	if stdout != "" || stderr != "" {
+		t.Errorf("expected no output, got stdout %q stderr %q", stdout, stderr)
+	}
+}
+
+func TestNoArgsShowsHelp(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "recall") {
+		t.Errorf("expected help output containing 'recall', got: %q", stdout)
+	}
+}
+
+// Former subcommand names are now valid filenames, not commands.
+func TestFormerSubcommandNameTreatedAsFilename(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	for _, name := range []string{"list", "search", "edit", "init", "version"} {
+		// No such file exists, so this should exit 1 silently (render path),
+		// not invoke a subcommand.
+		stdout, stderr, exitCode := runRecall(t, binPath, recallDir, name)
+		if exitCode != 1 {
+			t.Errorf("%q: expected exit 1 (treated as missing file), got %d", name, exitCode)
+		}
+		if stdout != "" || stderr != "" {
+			t.Errorf("%q: expected no output, got stdout %q stderr %q", name, stdout, stderr)
+		}
+	}
+
+	// A file literally named "list" should render.
+	if err := os.WriteFile(filepath.Join(recallDir, "list"), []byte("I am a file named list\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "list")
+	if exitCode != 0 {
+		t.Errorf("expected exit 0 rendering file named 'list', got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "I am a file named list") {
+		t.Errorf("expected rendered content of file 'list', got %q", stdout)
+	}
+}
+
+// --- Raw flag ----------------------------------------------------------------
+
 func TestRawFlag_ValidFile(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
@@ -144,192 +219,54 @@ func TestRawFlag_FileWithoutFrontmatter(t *testing.T) {
 	}
 }
 
-func TestRawFlag_WithEditFlagProducesError(t *testing.T) {
+// --- Edit flag ---------------------------------------------------------------
+
+func TestEditFlag_NoArgErrors(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "--raw", "--edit", "hello")
+	_, stderr, exitCode := runRecall(t, binPath, recallDir, "--edit")
 
 	if exitCode != 1 {
 		t.Errorf("expected exit code 1, got %d", exitCode)
 	}
-	if !strings.Contains(stderr, "--raw and --edit") {
-		t.Errorf("expected error about mutually exclusive flags, got stderr: %q", stderr)
+	if !strings.Contains(stderr, "--edit requires a filename") {
+		t.Errorf("expected 'requires a filename' error, got stderr: %q", stderr)
 	}
 }
 
-func TestRawFlag_WithoutFilenameShowsHelp(t *testing.T) {
+func TestEditFlag_CreatesAndOpensFile(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--raw")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
+	// Use `true` as a no-op editor so the command completes without interaction.
+	cmd := exec.Command(binPath, "--edit", "newnote")
+	cmd.Env = append(os.Environ(), "RECALL_DIR="+recallDir, "EDITOR=true")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("expected --edit to succeed, got err %v\n%s", err, out)
 	}
-	// Help text should mention the usage
-	if !strings.Contains(stdout, "recall") {
-		t.Errorf("expected help output containing 'recall', got: %q", stdout)
+	if _, err := os.Stat(filepath.Join(recallDir, "newnote")); err != nil {
+		t.Errorf("expected file 'newnote' to be created, stat err: %v", err)
 	}
 }
 
-func TestRawFlag_NonExistentFileExits1Silently(t *testing.T) {
+// --- Search flag -------------------------------------------------------------
+
+func TestSearchFlag_ShortAndLongEqual(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "--raw", "nonexistent")
+	shortOut, _, shortExit := runRecall(t, binPath, recallDir, "-s", "Hello")
+	longOut, _, longExit := runRecall(t, binPath, recallDir, "--search", "Hello")
 
-	if exitCode != 1 {
-		t.Errorf("expected exit code 1, got %d", exitCode)
+	if shortExit != 0 || longExit != 0 {
+		t.Errorf("expected exit 0 for both, got -s=%d --search=%d", shortExit, longExit)
 	}
-	if stdout != "" {
-		t.Errorf("expected no stdout, got: %q", stdout)
+	if shortOut != longOut {
+		t.Errorf("expected -s and --search output to match.\n-s:       %q\n--search: %q", shortOut, longOut)
 	}
-	if stderr != "" {
-		t.Errorf("expected no stderr, got: %q", stderr)
-	}
-}
-
-func TestRawFlag_RejectedOnEditSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "edit", "--raw", "hello")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --raw used on edit subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestRawFlag_RejectedOnListSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "list", "--raw")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --raw used on list subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestRawFlag_RejectedOnSearchSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "search", "--raw", "hello")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --raw used on search subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestRawFlag_RejectedOnInitSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "init", "--raw")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --raw used on init subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestRawFlag_ShorthandRejectedOnSubcommands(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	// Test -r shorthand on list subcommand
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "list", "-r")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when -r used on list subcommand")
-	}
-	if !strings.Contains(stderr, "unknown shorthand flag") {
-		t.Errorf("expected 'unknown shorthand flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestLsAliasListsFiles(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	stdout, _, exitCode := runRecall(t, binPath, recallDir, "ls")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-	expected := "hello\nplain\n"
-	if stdout != expected {
-		t.Errorf("expected stdout %q, got %q", expected, stdout)
-	}
-}
-
-func TestVersionCommandShowsMetadata(t *testing.T) {
-	binPath := buildBinaryWithMetadata(t)
-	recallDir := setupRecallDir(t)
-
-	stdout, _, exitCode := runRecall(t, binPath, recallDir, "version")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-	for _, want := range []string{
-		"recall version 0.1.0",
-		"Go version:",
-		"Platform:",
-		"Environment:    test",
-		"Branch:         test-branch",
-		"Module:",
-	} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("expected output to contain %q, got:\n%s", want, stdout)
-		}
-	}
-}
-
-func TestSearchFlag_MatchesSubcommandOutput(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	subStdout, _, subExit := runRecall(t, binPath, recallDir, "search", "Hello")
-	flagStdout, _, flagExit := runRecall(t, binPath, recallDir, "-s", "Hello")
-
-	if subExit != 0 || flagExit != 0 {
-		t.Errorf("expected exit code 0 for both, got subcommand=%d flag=%d", subExit, flagExit)
-	}
-	if flagStdout != subStdout {
-		t.Errorf("expected -s output to equal search subcommand output.\nsubcommand: %q\nflag:       %q", subStdout, flagStdout)
-	}
-	// Sanity: the search should have actually matched the hello file.
-	if !strings.Contains(flagStdout, "hello:") {
-		t.Errorf("expected a match in the 'hello' file, got: %q", flagStdout)
-	}
-}
-
-func TestSearchFlag_LongFormMatchesSubcommandOutput(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	subStdout, _, _ := runRecall(t, binPath, recallDir, "search", "Hello")
-	flagStdout, _, exitCode := runRecall(t, binPath, recallDir, "--search", "Hello")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-	if flagStdout != subStdout {
-		t.Errorf("expected --search output to equal search subcommand output.\nsubcommand: %q\nflag:       %q", subStdout, flagStdout)
+	if !strings.Contains(shortOut, "hello:") {
+		t.Errorf("expected a match in the 'hello' file, got: %q", shortOut)
 	}
 }
 
@@ -342,11 +279,8 @@ func TestSearchFlag_NoMatchesExitsZeroSilently(t *testing.T) {
 	if exitCode != 0 {
 		t.Errorf("expected exit code 0, got %d", exitCode)
 	}
-	if stdout != "" {
-		t.Errorf("expected no stdout, got: %q", stdout)
-	}
-	if stderr != "" {
-		t.Errorf("expected no stderr, got: %q", stderr)
+	if stdout != "" || stderr != "" {
+		t.Errorf("expected no output, got stdout %q stderr %q", stdout, stderr)
 	}
 }
 
@@ -364,35 +298,174 @@ func TestSearchFlag_WithoutQueryShowsHelp(t *testing.T) {
 	}
 }
 
-func TestSearchFlag_WithEditFlagProducesError(t *testing.T) {
+// --- List flag ---------------------------------------------------------------
+
+func TestListFlag_ListsFiles(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "-s", "--edit", "hello")
+	for _, args := range [][]string{{"--list"}, {"-l"}} {
+		stdout, _, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 0 {
+			t.Errorf("%v: expected exit code 0, got %d", args, exitCode)
+		}
+		expected := "hello\nplain\n"
+		if stdout != expected {
+			t.Errorf("%v: expected stdout %q, got %q", args, expected, stdout)
+		}
+	}
+}
+
+func TestListFlag_FilterByTag(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--list", "--tag", "greeting")
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	expected := "hello\n"
+	if stdout != expected {
+		t.Errorf("expected stdout %q, got %q", expected, stdout)
+	}
+}
+
+// --- Init flag ---------------------------------------------------------------
+
+func TestInitFlag_DefaultDir(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := filepath.Join(t.TempDir(), "created-by-init")
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--init")
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "initialized directory at "+recallDir) {
+		t.Errorf("expected init confirmation for %q, got: %q", recallDir, stdout)
+	}
+	if _, err := os.Stat(recallDir); err != nil {
+		t.Errorf("expected directory %q to exist, stat err: %v", recallDir, err)
+	}
+}
+
+func TestInitFlag_WithInitPath(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+	custom := filepath.Join(t.TempDir(), "custom-init")
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--init", "--init-path", custom)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "initialized directory at "+custom) {
+		t.Errorf("expected init confirmation for %q, got: %q", custom, stdout)
+	}
+	if _, err := os.Stat(custom); err != nil {
+		t.Errorf("expected directory %q to exist, stat err: %v", custom, err)
+	}
+}
+
+func TestInitPath_WithoutInitErrors(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	_, stderr, exitCode := runRecall(t, binPath, recallDir, "--init-path", "/tmp/whatever")
 
 	if exitCode != 1 {
 		t.Errorf("expected exit code 1, got %d", exitCode)
 	}
-	if !strings.Contains(stderr, "--search and --edit") {
-		t.Errorf("expected error about mutually exclusive flags, got stderr: %q", stderr)
+	if !strings.Contains(stderr, "--init-path requires --init") {
+		t.Errorf("expected '--init-path requires --init' error, got stderr: %q", stderr)
 	}
 }
 
-func TestSearchFlag_WithRawFlagIsAllowed(t *testing.T) {
+// --- Version flag ------------------------------------------------------------
+
+func TestVersionFlag_ShowsMetadata(t *testing.T) {
+	binPath := buildBinaryWithMetadata(t)
+	recallDir := setupRecallDir(t)
+
+	for _, args := range [][]string{{"--version"}, {"-v"}} {
+		stdout, _, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 0 {
+			t.Errorf("%v: expected exit code 0, got %d", args, exitCode)
+		}
+		for _, want := range []string{
+			"recall version 0.1.0",
+			"Go version:",
+			"Platform:",
+			"Environment:    test",
+			"Branch:         test-branch",
+			"Module:",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Errorf("%v: expected output to contain %q, got:\n%s", args, want, stdout)
+			}
+		}
+	}
+}
+
+// --- Completion flag ---------------------------------------------------------
+
+func TestCompletionFlag_SupportedShells(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-s", "-r", "Hello")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0 when combining -s and -r, got %d (stderr: %q)", exitCode, stderr)
-	}
-	if !strings.Contains(stdout, "hello:") {
-		t.Errorf("expected a match in the 'hello' file, got: %q", stdout)
+	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
+		stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-c", shell)
+		if exitCode != 0 {
+			t.Errorf("%s: expected exit code 0, got %d (stderr: %q)", shell, exitCode, stderr)
+		}
+		if len(strings.TrimSpace(stdout)) == 0 {
+			t.Errorf("%s: expected a non-empty completion script", shell)
+		}
 	}
 }
 
-func TestSearchFlag_ShownInHelp(t *testing.T) {
+func TestCompletionFlag_UnsupportedShellErrors(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	_, stderr, exitCode := runRecall(t, binPath, recallDir, "-c", "bogus")
+
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr, "unsupported shell") {
+		t.Errorf("expected 'unsupported shell' error, got stderr: %q", stderr)
+	}
+}
+
+// --- Mutual exclusivity ------------------------------------------------------
+
+func TestActionFlags_MutuallyExclusive(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	pairs := [][]string{
+		{"--edit", "--list"},
+		{"--search", "--list"},
+		{"--version", "--init"},
+		{"--list", "--version"},
+		{"-e", "-s"},
+	}
+	for _, args := range pairs {
+		_, stderr, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 1 {
+			t.Errorf("%v: expected exit code 1, got %d", args, exitCode)
+		}
+		if !strings.Contains(stderr, "only one action flag") {
+			t.Errorf("%v: expected 'only one action flag' error, got stderr: %q", args, stderr)
+		}
+	}
+}
+
+// --- Help --------------------------------------------------------------------
+
+func TestHelp_ListsAllFlagsNoSubcommands(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
@@ -401,77 +474,17 @@ func TestSearchFlag_ShownInHelp(t *testing.T) {
 	if exitCode != 0 {
 		t.Errorf("expected exit code 0, got %d", exitCode)
 	}
-	if !strings.Contains(stdout, "--search") || !strings.Contains(stdout, "-s,") {
-		t.Errorf("expected help to list the --search / -s flag, got: %q", stdout)
+	for _, want := range []string{
+		"-e, --edit", "-s, --search", "-l, --list",
+		"-i, --init", "-v, --version", "-c, --completion",
+		"-r, --raw", "--tag", "--init-path",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("expected help to list %q, got:\n%s", want, stdout)
+		}
 	}
-}
-
-func TestSearchFlag_RejectedOnEditSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "edit", "--search", "hello")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --search used on edit subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestSearchFlag_RejectedOnListSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "list", "--search")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --search used on list subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestSearchFlag_RejectedOnSearchSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "search", "--search", "hello")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --search used on search subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestSearchFlag_RejectedOnInitSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "init", "--search")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when --search used on init subcommand")
-	}
-	if !strings.Contains(stderr, "unknown flag") {
-		t.Errorf("expected 'unknown flag' error, got stderr: %q", stderr)
-	}
-}
-
-func TestSearchFlag_ShorthandRejectedOnListSubcommand(t *testing.T) {
-	binPath := buildBinary(t)
-	recallDir := setupRecallDir(t)
-
-	_, stderr, exitCode := runRecall(t, binPath, recallDir, "list", "-s")
-
-	if exitCode == 0 {
-		t.Error("expected non-zero exit code when -s used on list subcommand")
-	}
-	if !strings.Contains(stderr, "unknown shorthand flag") {
-		t.Errorf("expected 'unknown shorthand flag' error, got stderr: %q", stderr)
+	// No subcommands should be advertised.
+	if strings.Contains(stdout, "Available Commands:") {
+		t.Errorf("expected no subcommands section in help, got:\n%s", stdout)
 	}
 }

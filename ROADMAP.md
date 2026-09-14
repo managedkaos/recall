@@ -5,13 +5,6 @@ subject to change.
 
 ## Features to add
 
-### Search via `-s` flag
-
-Add a root-level `-s` flag as an alternative to the existing `search`
-subcommand, mirroring how the `-e` (edit) and `-r` (raw) flags are wired on
-the root command. This lets you run `recall -s "docker compose"` alongside
-the current `recall search "docker compose"`.
-
 ### Encrypt and decrypt files
 
 Support encrypting and decrypting individual recall files at rest, built

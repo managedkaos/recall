@@ -13,23 +13,14 @@ var (
 	Major   string
 	Minor   string
 	Patch   string
-	GitBranch         string
-	BuildEnvironment  string
-	BuildDate         string
+
+	GitBranch        string
+	BuildEnvironment string
+	BuildDate        string
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version of recall",
-	Long:  "Print the version of the recall binary and exit.",
-	Args:  cobra.NoArgs,
-	RunE:  runVersion,
-}
-
-func init() {
-	rootCmd.AddCommand(versionCmd)
-}
-
+// runVersion prints the build/version metadata. Invoked by the root command's
+// --version / -v flag.
 func runVersion(cmd *cobra.Command, args []string) error {
 	meta := buildinfo.Collect(Major, Minor, Patch, GitBranch, BuildEnvironment, BuildDate)
 	fmt.Print(meta.String())

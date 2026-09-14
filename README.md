@@ -31,23 +31,19 @@ go build -o recall .
 
 ## Running
 
-### Initialize (optional)
+Recall's primary action is to look up a file: the first argument is always
+treated as the name of a file to display. All other operations are selected
+with root-level flags. Each action has a single-letter short form and a
+spelled-out long form. Only one action flag may be used at a time.
 
-Create the recall directory explicitly. This is optional — the directory is created automatically on first use.
-
-```bash
-recall init
-```
-
-### Store a file
-
-Create or edit a recall file using your `$EDITOR`:
-
-```bash
-recall edit docker
-```
-
-This opens a file named `docker` in your editor. Write your notes in markdown format and save.
+| Action | Short | Long |
+| --- | --- | --- |
+| Edit a file in `$EDITOR` | `-e` | `--edit` |
+| Search all files | `-s` | `--search` |
+| List all files | `-l` | `--list` |
+| Initialize the directory | `-i` | `--init` |
+| Print the version | `-v` | `--version` |
+| Generate a completion script | `-c <shell>` | `--completion <shell>` |
 
 ### Recall a file
 
@@ -57,24 +53,38 @@ Display a stored file with terminal-rendered markdown:
 recall docker
 ```
 
-You can also use the `-e` flag to quickly edit:
+Output the unformatted markdown with `-r` / `--raw`:
+
+```bash
+recall -r docker
+```
+
+Because there are no subcommands, any name is a valid filename — including
+names like `list` or `search`.
+
+### Store a file
+
+Create or edit a recall file using your `$EDITOR`:
 
 ```bash
 recall -e docker
 ```
+
+This opens a file named `docker` in your editor. Write your notes in markdown
+format and save. If the file doesn't exist, it is created first.
 
 ### List files
 
 List all stored recall files:
 
 ```bash
-recall list
+recall -l
 ```
 
 Filter by tag:
 
 ```bash
-recall list --tag devops
+recall -l --tag devops
 ```
 
 ### Search
@@ -82,20 +92,44 @@ recall list --tag devops
 Search across all files for a string (case-insensitive):
 
 ```bash
-recall search "docker compose"
+recall -s "docker compose"
 ```
 
-You can also use the `-s` flag as a shorthand, equivalent to the `search` subcommand:
+### Initialize (optional)
+
+Create the recall directory explicitly. This is optional — the directory is
+created automatically on first use.
 
 ```bash
-recall -s "docker compose"
+recall -i
+```
+
+By default this initializes `~/.recall` (or the path from `RECALL_DIR`). To
+initialize a specific directory, use `--init-path`:
+
+```bash
+recall -i --init-path ~/notes/recall
+```
+
+### Version
+
+```bash
+recall -v
+```
+
+### Shell completion
+
+Generate a completion script for your shell (`bash`, `zsh`, `fish`, or
+`powershell`):
+
+```bash
+recall -c bash > /etc/bash_completion.d/recall
 ```
 
 ### Help
 
 ```bash
 recall --help
-recall edit --help
 ```
 
 ## Configuration
@@ -125,7 +159,7 @@ tags: docker, devops, containers
 - `docker ps -a`
 ```
 
-Tags enable filtering with `recall list --tag <tag>`.
+Tags enable filtering with `recall -l --tag <tag>`.
 
 ## Supported Platforms
 

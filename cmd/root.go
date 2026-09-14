@@ -11,24 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// reservedNames are subcommand names that cannot be used as filenames.
-var reservedNames = map[string]bool{
-	"edit":    true,
-	"list":    true,
-	"ls":      true,
-	"search":  true,
-	"init":    true,
-	"version": true,
-}
+// Action flags select a mode of operation other than the default
+// look-up-and-render behavior. At most one may be set per invocation.
+var (
+	editFlag       bool
+	searchFlag     bool
+	listFlag       bool
+	initFlag       bool
+	versionFlag    bool
+	completionFlag string
 
-// IsReservedName checks if a filename conflicts with a subcommand name.
-func IsReservedName(name string) bool {
-	return reservedNames[name]
-}
-
-var editFlag bool
-var rawFlag bool
-var searchFlag bool
+	// Modifiers
+	rawFlag  bool
+	tagFlag  string
+	initPath string
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "recall [filename]",
@@ -36,46 +33,87 @@ var rootCmd = &cobra.Command{
 	Long:  `Recall is a CLI tool that stores, retrieves, edits, lists, and searches markdown-formatted reference files from the command line.`,
 	Args:  cobra.ArbitraryArgs,
 	RunE:  runRecall,
-	// Prevent Cobra from interpreting -e on subcommands
-	TraverseChildren: true,
 }
 
 func init() {
-	rootCmd.Flags().BoolVarP(&editFlag, "edit", "e", false, "edit the specified file")
-	rootCmd.Flags().BoolVarP(&rawFlag, "raw", "r", false, "output unformatted markdown without ANSI styling")
-	rootCmd.Flags().BoolVarP(&searchFlag, "search", "s", false, "search all recall files for the given query")
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	f := rootCmd.Flags()
+	// Action flags
+	f.BoolVarP(&editFlag, "edit", "e", false, "edit the specified file in $EDITOR")
+	f.BoolVarP(&searchFlag, "search", "s", false, "search all recall files for the given query")
+	f.BoolVarP(&listFlag, "list", "l", false, "list all recall files")
+	f.BoolVarP(&initFlag, "init", "i", false, "initialize the recall directory")
+	f.BoolVarP(&versionFlag, "version", "v", false, "print the version of recall")
+	f.StringVarP(&completionFlag, "completion", "c", "", "generate a completion script for the given shell: bash|zsh|fish|powershell")
+
+	// Modifiers
+	f.BoolVarP(&rawFlag, "raw", "r", false, "output unformatted markdown without ANSI styling")
+	f.StringVar(&tagFlag, "tag", "", "filter --list by tag (case-insensitive)")
+	f.StringVar(&initPath, "init-path", "", "with --init, initialize the given directory instead of the default")
 }
 
+// runRecall is the single dispatch point for the recall command. It enforces
+// that at most one action flag is set, then routes to the appropriate handler.
+// With no action flag, it performs the default look-up-and-render behavior.
 func runRecall(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return cmd.Help()
+	// Enforce at most one action flag.
+	actions := 0
+	for _, on := range []bool{editFlag, searchFlag, listFlag, initFlag, versionFlag, completionFlag != ""} {
+		if on {
+			actions++
+		}
 	}
-
-	// Search-edit mutual exclusivity
-	if searchFlag && editFlag {
-		fmt.Fprintln(os.Stderr, "recall: --search and --edit flags cannot be used together")
+	if actions > 1 {
+		fmt.Fprintln(os.Stderr, "recall: only one action flag (--edit, --search, --list, --init, --version, --completion) may be used at a time")
 		os.Exit(1)
 	}
 
-	// If -s flag is set, delegate to search logic
-	if searchFlag {
+	// --init-path requires --init.
+	if initPath != "" && !initFlag {
+		fmt.Fprintln(os.Stderr, "recall: --init-path requires --init")
+		os.Exit(1)
+	}
+
+	switch {
+	case versionFlag:
+		return runVersion(cmd, args)
+
+	case completionFlag != "":
+		return runCompletion(cmd, completionFlag)
+
+	case initFlag:
+		return runInit(initPath)
+
+	case listFlag:
+		return runList(tagFlag)
+
+	case searchFlag:
+		if len(args) == 0 {
+			return cmd.Help()
+		}
 		return runSearch(args[0])
-	}
 
-	filename := args[0]
-
-	// Mutual exclusivity check
-	if rawFlag && editFlag {
-		fmt.Fprintln(os.Stderr, "recall: --raw and --edit flags cannot be used together")
-		os.Exit(1)
-	}
-
-	// If -e flag is set, delegate to edit logic
-	if editFlag {
+	case editFlag:
+		if len(args) == 0 {
+			fmt.Fprintln(os.Stderr, "recall: --edit requires a filename")
+			os.Exit(1)
+		}
 		return runEdit(cmd, args)
-	}
 
-	// Resolve the recall directory
+	default:
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+		return renderFile(args[0])
+	}
+}
+
+// renderFile reads the named recall file, strips front-matter, and writes it to
+// stdout. With --raw set, the body is written unmodified; otherwise it is
+// rendered with ANSI styling. A missing file exits with a non-zero code and no
+// output.
+func renderFile(filename string) error {
 	dir, err := config.RecallDir()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -92,7 +130,6 @@ func runRecall(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 
-	// Read the file
 	content, err := storage.Read(dir, filename)
 	if err != nil {
 		os.Exit(1)
@@ -107,13 +144,11 @@ func runRecall(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Render the markdown
 	output, err := renderer.Render(body)
 	if err != nil {
 		os.Exit(1)
 	}
 
-	// Print to stdout
 	fmt.Print(output)
 	return nil
 }

@@ -10,25 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var editCmd = &cobra.Command{
-	Use:   "edit <filename>",
-	Short: "Open a recall file in your editor",
-	Long:  `Open a recall file in $EDITOR. If the file doesn't exist, it will be created first.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runEdit,
-}
-
-func init() {
-	rootCmd.AddCommand(editCmd)
-}
-
+// runEdit opens a recall file in $EDITOR, creating it first if it doesn't
+// exist. Invoked by the root command's --edit / -e flag.
 func runEdit(cmd *cobra.Command, args []string) error {
 	filename := args[0]
-
-	if IsReservedName(filename) {
-		fmt.Fprintf(os.Stderr, "recall: '%s' is a reserved command name and cannot be used as a filename\n", filename)
-		os.Exit(1)
-	}
 
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
