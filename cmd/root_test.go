@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -478,6 +479,7 @@ func TestHelp_ListsAllFlagsNoSubcommands(t *testing.T) {
 		"-e, --edit", "-s, --search", "-l, --list",
 		"-i, --init", "-v, --version", "-c, --completion",
 		"-r, --raw", "--tag", "--init-path",
+		"-m, --metadata", "-j, --json",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("expected help to list %q, got:\n%s", want, stdout)
@@ -486,5 +488,210 @@ func TestHelp_ListsAllFlagsNoSubcommands(t *testing.T) {
 	// No subcommands should be advertised.
 	if strings.Contains(stdout, "Available Commands:") {
 		t.Errorf("expected no subcommands section in help, got:\n%s", stdout)
+	}
+}
+
+// --- Metadata flag -----------------------------------------------------------
+
+func TestMetadataFlag_ExistingFileTextOutput(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	for _, args := range [][]string{{"-m", "hello"}, {"--metadata", "hello"}} {
+		stdout, stderr, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 0 {
+			t.Errorf("%v: expected exit code 0, got %d (stderr: %q)", args, exitCode, stderr)
+		}
+		for _, want := range []string{
+			"Name:     hello",
+			"Path:",
+			"Size:",
+			"Modified:",
+			"Tags:     greeting",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Errorf("%v: expected stdout to contain %q, got:\n%s", args, want, stdout)
+			}
+		}
+		if !strings.Contains(stdout, filepath.Join(recallDir, "hello")) {
+			t.Errorf("%v: expected stdout to contain the file path, got:\n%s", args, stdout)
+		}
+	}
+}
+
+func TestMetadataFlag_TaglessFileShowsNone(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "-m", "plain")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Tags:     (none)") {
+		t.Errorf("expected 'Tags:     (none)' for tagless file, got:\n%s", stdout)
+	}
+}
+
+func TestMetadataFlag_JSONOutput(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-m", "-j", "hello")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d (stderr: %q)", exitCode, stderr)
+	}
+
+	var decoded []struct {
+		Name      string   `json:"name"`
+		Path      string   `json:"path"`
+		SizeBytes int64    `json:"size_bytes"`
+		Modified  string   `json:"modified"`
+		Tags      []string `json:"tags"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+		t.Fatalf("expected valid JSON, got error %v\noutput:\n%s", err, stdout)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("expected 1 element, got %d", len(decoded))
+	}
+	if decoded[0].Name != "hello" {
+		t.Errorf("expected name 'hello', got %q", decoded[0].Name)
+	}
+	if decoded[0].SizeBytes <= 0 {
+		t.Errorf("expected positive size, got %d", decoded[0].SizeBytes)
+	}
+	if decoded[0].Modified == "" {
+		t.Errorf("expected non-empty modified timestamp")
+	}
+	if len(decoded[0].Tags) != 1 || decoded[0].Tags[0] != "greeting" {
+		t.Errorf("expected tags [greeting], got %v", decoded[0].Tags)
+	}
+}
+
+func TestMetadataFlag_MissingFileErrorsExit1(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-m", "nope")
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	if stdout != "" {
+		t.Errorf("expected no stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "file not found: nope") {
+		t.Errorf("expected 'file not found' error, got stderr: %q", stderr)
+	}
+}
+
+func TestMetadataFlag_MixedExistingAndMissingExit0(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-m", "hello", "nope")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0 (at least one file exists), got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Name:     hello") {
+		t.Errorf("expected metadata for 'hello', got:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "file not found: nope") {
+		t.Errorf("expected 'file not found: nope' on stderr, got: %q", stderr)
+	}
+}
+
+func TestMetadataFlag_JSONMissingEmitsEmptyArrayExit1(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, stderr, exitCode := runRecall(t, binPath, recallDir, "-m", "-j", "nope")
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	if strings.TrimSpace(stdout) != "[]" {
+		t.Errorf("expected stdout '[]', got %q", stdout)
+	}
+	if !strings.Contains(stderr, "file not found: nope") {
+		t.Errorf("expected 'file not found' error, got stderr: %q", stderr)
+	}
+}
+
+func TestMetadataFlag_NoArgsShowsHelp(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "-m")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "recall") {
+		t.Errorf("expected help output containing 'recall', got: %q", stdout)
+	}
+}
+
+func TestJSONFlag_WithoutMetadataErrors(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	_, stderr, exitCode := runRecall(t, binPath, recallDir, "-j", "hello")
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr, "--json requires --metadata") {
+		t.Errorf("expected '--json requires --metadata' error, got stderr: %q", stderr)
+	}
+}
+
+func TestMetadataFlag_MutuallyExclusiveWithOtherActions(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	pairs := [][]string{
+		{"-m", "-l"},
+		{"--metadata", "--list", "hello"},
+		{"-m", "-e", "hello"},
+	}
+	for _, args := range pairs {
+		_, stderr, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 1 {
+			t.Errorf("%v: expected exit code 1, got %d", args, exitCode)
+		}
+		if !strings.Contains(stderr, "only one action flag") {
+			t.Errorf("%v: expected 'only one action flag' error, got stderr: %q", args, stderr)
+		}
+	}
+}
+
+func TestMetadataFlag_DoesNotMutateFiles(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	before, err := os.ReadFile(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeInfo, err := os.Stat(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, exitCode := runRecall(t, binPath, recallDir, "-m", "-j", "hello"); exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", exitCode)
+	}
+
+	after, err := os.ReadFile(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterInfo, err := os.Stat(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(before) != string(after) {
+		t.Errorf("file content changed after metadata read")
+	}
+	if !beforeInfo.ModTime().Equal(afterInfo.ModTime()) {
+		t.Errorf("file modtime changed after metadata read")
 	}
 }
