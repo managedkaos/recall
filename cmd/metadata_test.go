@@ -8,7 +8,7 @@ import (
 )
 
 // writeTempFile creates a file with the given content in a fresh temp dir and
-// returns the directory and the file's base name.
+// returns that directory. The file is created as dir/name.
 func writeTempFile(t *testing.T, name, content string) (dir string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -113,14 +113,11 @@ func TestPlatformTimes_DoesNotPanicAndIsPlausible(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, changed := platformTimes(info)
+	created := platformTimes(info)
 
 	// Non-nil returns should be plausible (non-zero) times.
 	if created != nil && created.IsZero() {
 		t.Errorf("expected non-zero created time when present")
-	}
-	if changed != nil && changed.IsZero() {
-		t.Errorf("expected non-zero changed time when present")
 	}
 }
 
@@ -133,6 +130,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer r.Close()
 	os.Stdout = w
 
 	done := make(chan string)

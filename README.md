@@ -99,7 +99,7 @@ recall -s "docker compose"
 ### Report metadata
 
 Report the file path, filesystem metadata (size, modification time, and — where
-the platform exposes them — creation and change times), and any tags for one or
+the platform exposes them — creation time), and any tags for one or
 more files:
 
 ```bash
@@ -122,9 +122,10 @@ recall -m -j docker
 ```
 
 Timestamps in JSON output are formatted as RFC 3339. Note that the available
-timestamps vary by platform: macOS reports creation and change times, Linux
-reports the change time, and Windows reports the creation time. Unavailable
-times are omitted rather than reported as empty.
+timestamps vary by platform: the modification time is reported on all
+platforms; macOS and Windows also report the creation time, while Linux reports
+only the modification time. Unavailable times are omitted rather than reported
+as empty.
 
 ### Initialize (optional)
 

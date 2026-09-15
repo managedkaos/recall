@@ -26,7 +26,6 @@ type FileMetadata struct {
 	SizeBytes int64      `json:"size_bytes"`
 	Modified  time.Time  `json:"modified"`
 	Created   *time.Time `json:"created,omitempty"`
-	Changed   *time.Time `json:"changed,omitempty"`
 	Tags      []string   `json:"tags"`
 }
 
@@ -46,7 +45,7 @@ func collectMetadata(dir, name string) (FileMetadata, error) {
 		return FileMetadata{}, err
 	}
 
-	created, changed := platformTimes(info)
+	created := platformTimes(info)
 
 	content, err := storage.Read(dir, name)
 	if err != nil {
@@ -64,7 +63,6 @@ func collectMetadata(dir, name string) (FileMetadata, error) {
 		SizeBytes: info.Size(),
 		Modified:  info.ModTime(),
 		Created:   created,
-		Changed:   changed,
 		Tags:      tags,
 	}, nil
 }
@@ -83,9 +81,6 @@ func renderText(items []FileMetadata) {
 		fmt.Printf("Modified: %s\n", md.Modified.Format(timeFormat))
 		if md.Created != nil {
 			fmt.Printf("Created:  %s\n", md.Created.Format(timeFormat))
-		}
-		if md.Changed != nil {
-			fmt.Printf("Changed:  %s\n", md.Changed.Format(timeFormat))
 		}
 		if len(md.Tags) > 0 {
 			fmt.Printf("Tags:     %s\n", strings.Join(md.Tags, ", "))
