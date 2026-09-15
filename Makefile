@@ -3,17 +3,15 @@ BUILD_DIR := bin
 MODULE := github.com/managedkaos/recall
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-# Version extraction from version.yml
-VERSION_MAJOR := $(shell grep '^major:' version.yml | awk '{print $$2}')
-VERSION_MINOR := $(shell grep '^minor:' version.yml | awk '{print $$2}')
-VERSION_PATCH := $(shell grep '^patch:' version.yml | awk '{print $$2}')
+# Local version from the nearest matching Git tag; environment/CLI overrides win.
+VERSION ?= $(shell git describe --tags --dirty=-local --match 'v[0-9]*' --match 'V[0-9]*' --match '[0-9]*' 2>/dev/null || echo unknown)
 
 # Build metadata (overridable via environment, e.g. in CI)
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BUILD_ENV  ?= local ($(shell uname -s))
 
-LDFLAGS := -ldflags "-X '$(MODULE)/cmd.Major=$(VERSION_MAJOR)' -X '$(MODULE)/cmd.Minor=$(VERSION_MINOR)' -X '$(MODULE)/cmd.Patch=$(VERSION_PATCH)' -X '$(MODULE)/cmd.GitBranch=$(GIT_BRANCH)' -X '$(MODULE)/cmd.BuildDate=$(BUILD_DATE)' -X '$(MODULE)/cmd.BuildEnvironment=$(BUILD_ENV)'"
+LDFLAGS := -ldflags "-X '$(MODULE)/cmd.Version=$(VERSION)' -X '$(MODULE)/cmd.GitBranch=$(GIT_BRANCH)' -X '$(MODULE)/cmd.BuildDate=$(BUILD_DATE)' -X '$(MODULE)/cmd.BuildEnvironment=$(BUILD_ENV)'"
 
 .PHONY: help
 help: ## Display available targets

@@ -32,8 +32,8 @@ func buildBinaryWithMetadata(t *testing.T) string {
 	binPath := filepath.Join(binDir, "recall")
 	module := "github.com/managedkaos/recall"
 	ldflags := fmt.Sprintf(
-		"-X %s/cmd.Major=0 -X %s/cmd.Minor=1 -X %s/cmd.Patch=0 -X %s/cmd.GitBranch=test-branch -X %s/cmd.BuildDate=2026-07-21T12:00:00Z -X %s/cmd.BuildEnvironment=test",
-		module, module, module, module, module, module,
+		"-X %s/cmd.Version=0.1.0 -X %s/cmd.GitBranch=test-branch -X %s/cmd.BuildDate=2026-07-21T12:00:00Z -X %s/cmd.BuildEnvironment=test",
+		module, module, module, module,
 	)
 
 	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".")
@@ -46,7 +46,7 @@ func buildBinaryWithMetadata(t *testing.T) string {
 }
 
 // buildBinaryWithVersion compiles recall injecting a single cmd.Version ldflag
-// (as GoReleaser does from the git tag), leaving Major/Minor/Patch unset.
+// (as GoReleaser does from the git tag).
 func buildBinaryWithVersion(t *testing.T, version string) string {
 	t.Helper()
 	binDir := t.TempDir()
@@ -430,9 +430,20 @@ func TestVersionFlag_ShowsMetadata(t *testing.T) {
 	}
 }
 
+func TestVersionFlag_PlainBuildIsUnknown(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+	for _, flag := range []string{"--version", "-v"} {
+		stdout, _, exitCode := runRecall(t, binPath, recallDir, flag)
+		if exitCode != 0 || !strings.HasPrefix(stdout, "recall version unknown\n") {
+			t.Errorf("%s: expected unknown version and exit 0, got exit %d:\n%s", flag, exitCode, stdout)
+		}
+	}
+}
+
 // A single injected cmd.Version (as GoReleaser sets from the tag) must be shown
-// verbatim, taking precedence over unset Major/Minor/Patch.
-func TestVersionFlag_InjectedVersionWins(t *testing.T) {
+// after normalization.
+func TestVersionFlag_InjectedVersion(t *testing.T) {
 	binPath := buildBinaryWithVersion(t, "9.9.9")
 	recallDir := setupRecallDir(t)
 
