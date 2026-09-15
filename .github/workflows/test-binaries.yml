@@ -52,8 +52,14 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: artifacts
 
-      - name: List downloaded files
+      - name: List downloaded files (non-windows)
+        if: matrix.os != 'windows'
         run: ls -la artifacts || true
+
+      - name: List downloaded files (windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: Get-ChildItem -Path artifacts | Format-List
 
       # linux/darwin archives are .tar.gz; windows is .zip. Extract the raw
       # binary next to the archive, then run its --version as a smoke test.
