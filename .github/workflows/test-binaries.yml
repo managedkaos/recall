@@ -23,7 +23,7 @@ jobs:
             ext: ''
           - os: linux
             arch: arm64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm
             ext: ''
           - os: darwin
             arch: amd64
