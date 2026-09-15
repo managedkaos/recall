@@ -41,6 +41,7 @@ spelled-out long form. Only one action flag may be used at a time.
 | Edit a file in `$EDITOR` | `-e` | `--edit` |
 | Search all files | `-s` | `--search` |
 | List all files | `-l` | `--list` |
+| Report file metadata | `-m` | `--metadata` |
 | Initialize the directory | `-i` | `--init` |
 | Print the version | `-v` | `--version` |
 | Generate a completion script | `-c <shell>` | `--completion <shell>` |
@@ -94,6 +95,37 @@ Search across all files for a string (case-insensitive):
 ```bash
 recall -s "docker compose"
 ```
+
+### Report metadata
+
+Report the file path, filesystem metadata (size, modification time, and — where
+the platform exposes them — creation time), and any tags for one or
+more files:
+
+```bash
+recall -m docker
+```
+
+You can pass multiple names; metadata is reported for each file that exists, and
+a message is printed to stderr for any that do not. The command exits with a
+non-zero status only when none of the named files exist.
+
+```bash
+recall -m docker kubernetes notes
+```
+
+Use `-j` / `--json` to emit the report as a JSON array instead of text. This
+modifier is only valid together with `--metadata`:
+
+```bash
+recall -m -j docker
+```
+
+Timestamps in JSON output are formatted as RFC 3339. Note that the available
+timestamps vary by platform: the modification time is reported on all
+platforms; macOS and Windows also report the creation time, while Linux reports
+only the modification time. Unavailable times are omitted rather than reported
+as empty.
 
 ### Initialize (optional)
 

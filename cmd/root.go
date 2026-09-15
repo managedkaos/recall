@@ -20,11 +20,13 @@ var (
 	initFlag       bool
 	versionFlag    bool
 	completionFlag string
+	metadataFlag   bool
 
 	// Modifiers
 	rawFlag  bool
 	tagFlag  string
 	initPath string
+	jsonFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -46,11 +48,13 @@ func init() {
 	f.BoolVarP(&initFlag, "init", "i", false, "initialize the recall directory")
 	f.BoolVarP(&versionFlag, "version", "v", false, "print the version of recall")
 	f.StringVarP(&completionFlag, "completion", "c", "", "generate a completion script for the given shell: bash|zsh|fish|powershell")
+	f.BoolVarP(&metadataFlag, "metadata", "m", false, "report file paths, metadata, and tags for the named files")
 
 	// Modifiers
 	f.BoolVarP(&rawFlag, "raw", "r", false, "output unformatted markdown without ANSI styling")
 	f.StringVar(&tagFlag, "tag", "", "filter --list by tag (case-insensitive)")
 	f.StringVar(&initPath, "init-path", "", "with --init, initialize the given directory instead of the default")
+	f.BoolVarP(&jsonFlag, "json", "j", false, "with --metadata, output the report as JSON")
 }
 
 // runRecall is the single dispatch point for the recall command. It enforces
@@ -59,19 +63,25 @@ func init() {
 func runRecall(cmd *cobra.Command, args []string) error {
 	// Enforce at most one action flag.
 	actions := 0
-	for _, on := range []bool{editFlag, searchFlag, listFlag, initFlag, versionFlag, completionFlag != ""} {
+	for _, on := range []bool{editFlag, searchFlag, listFlag, initFlag, versionFlag, completionFlag != "", metadataFlag} {
 		if on {
 			actions++
 		}
 	}
 	if actions > 1 {
-		fmt.Fprintln(os.Stderr, "recall: only one action flag (--edit, --search, --list, --init, --version, --completion) may be used at a time")
+		fmt.Fprintln(os.Stderr, "recall: only one action flag (--edit, --search, --list, --init, --version, --completion, --metadata) may be used at a time")
 		os.Exit(1)
 	}
 
 	// --init-path requires --init.
 	if initPath != "" && !initFlag {
 		fmt.Fprintln(os.Stderr, "recall: --init-path requires --init")
+		os.Exit(1)
+	}
+
+	// --json requires --metadata.
+	if jsonFlag && !metadataFlag {
+		fmt.Fprintln(os.Stderr, "recall: --json requires --metadata")
 		os.Exit(1)
 	}
 
@@ -87,6 +97,12 @@ func runRecall(cmd *cobra.Command, args []string) error {
 
 	case listFlag:
 		return runList(tagFlag)
+
+	case metadataFlag:
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+		return runMetadata(args, jsonFlag)
 
 	case searchFlag:
 		if len(args) == 0 {
