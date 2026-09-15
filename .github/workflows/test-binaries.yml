@@ -6,7 +6,7 @@ on:
       artifact_name:
         required: false
         type: string
-        default: 'bin'
+        default: 'dist'
       binary_name:
         required: false
         type: string
@@ -39,7 +39,9 @@ jobs:
             ext: '.exe'
     runs-on: ${{ matrix.runner }}
     env:
-      FILE: ${{ format('{}-{}-{}{}', inputs.binary_name, matrix.os, matrix.arch, matrix.ext) }}
+      # GoReleaser archive base name, e.g. recall-linux-amd64
+      ARCHIVE_BASE: ${{ format('{0}-{1}-{2}', inputs.binary_name, matrix.os, matrix.arch) }}
+      BIN: ${{ format('{0}{1}', inputs.binary_name, matrix.ext) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
@@ -53,23 +55,25 @@ jobs:
       - name: List downloaded files
         run: ls -la artifacts || true
 
-      - name: Prepare binary (non-windows)
+      # linux/darwin archives are .tar.gz; windows is .zip. Extract the raw
+      # binary next to the archive, then run its --version as a smoke test.
+      - name: Extract and smoke test (non-windows)
         if: matrix.os != 'windows'
         run: |
-          chmod +x artifacts/${{ env.FILE }}
+          set -euo pipefail
+          tar -xzf "artifacts/${ARCHIVE_BASE}.tar.gz" -C artifacts
+          chmod +x "artifacts/${BIN}"
+          echo "Running artifacts/${BIN} --version"
+          "./artifacts/${BIN}" --version
 
-      - name: Run smoke test (non-windows)
-        if: matrix.os != 'windows'
-        run: |
-          echo "Running binary artifacts/${{ env.FILE }}"
-          ./artifacts/${{ env.FILE }} --version || true
-
-      - name: Run smoke test (windows)
+      - name: Extract and smoke test (windows)
         if: matrix.os == 'windows'
         shell: pwsh
         run: |
-          Write-Host "Running binary .\\artifacts\\${{ env.FILE }}"
-          & .\\artifacts\\${{ env.FILE }} --version || Write-Host 'binary ran or exited non-zero'
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive -Path "artifacts/$env:ARCHIVE_BASE.zip" -DestinationPath artifacts -Force
+          Write-Host "Running .\artifacts\$env:BIN --version"
+          & ".\artifacts\$env:BIN" --version
 
       - name: Upload test log
         uses: actions/upload-artifact@v7.0.1

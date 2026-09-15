@@ -45,6 +45,27 @@ func buildBinaryWithMetadata(t *testing.T) string {
 	return binPath
 }
 
+// buildBinaryWithVersion compiles recall injecting a single cmd.Version ldflag
+// (as GoReleaser does from the git tag), leaving Major/Minor/Patch unset.
+func buildBinaryWithVersion(t *testing.T, version string) string {
+	t.Helper()
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "recall")
+	module := "github.com/managedkaos/recall"
+	ldflags := fmt.Sprintf(
+		"-X %s/cmd.Version=%s -X %s/cmd.GitBranch=test-branch -X %s/cmd.BuildDate=2026-07-21T12:00:00Z -X %s/cmd.BuildEnvironment=goreleaser",
+		module, version, module, module, module,
+	)
+
+	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".")
+	cmd.Dir = filepath.Join(getProjectRoot(t))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to build binary with version: %v\n%s", err, out)
+	}
+	return binPath
+}
+
 // getProjectRoot returns the project root directory.
 func getProjectRoot(t *testing.T) string {
 	t.Helper()
@@ -406,6 +427,35 @@ func TestVersionFlag_ShowsMetadata(t *testing.T) {
 				t.Errorf("%v: expected output to contain %q, got:\n%s", args, want, stdout)
 			}
 		}
+	}
+}
+
+// A single injected cmd.Version (as GoReleaser sets from the tag) must be shown
+// verbatim, taking precedence over unset Major/Minor/Patch.
+func TestVersionFlag_InjectedVersionWins(t *testing.T) {
+	binPath := buildBinaryWithVersion(t, "9.9.9")
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--version")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "recall version 9.9.9") {
+		t.Errorf("expected 'recall version 9.9.9', got:\n%s", stdout)
+	}
+}
+
+// A tag with a leading 'v' must be normalized to a bare semantic version.
+func TestVersionFlag_InjectedVersionStripsLeadingV(t *testing.T) {
+	binPath := buildBinaryWithVersion(t, "v2.3.4")
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--version")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "recall version 2.3.4") {
+		t.Errorf("expected 'recall version 2.3.4', got:\n%s", stdout)
 	}
 }
 

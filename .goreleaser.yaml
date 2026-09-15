@@ -1,0 +1,72 @@
+# GoReleaser configuration for recall.
+# Docs: https://goreleaser.com
+#
+# The git tag is the authoritative version: {{ .Version }} is the tag with the
+# leading "v" stripped by GoReleaser. It is injected into cmd.Version, which the
+# binary prefers over the version.yml-derived Major/Minor/Patch components.
+version: 2
+
+project_name: recall
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: recall
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Keep exactly the five supported targets: linux amd64/arm64,
+    # darwin amd64/arm64, windows amd64. Windows arm64 is not shipped.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/managedkaos/recall/cmd.Version={{ .Version }}
+      - -X github.com/managedkaos/recall/cmd.GitBranch={{ .Branch }}
+      - -X github.com/managedkaos/recall/cmd.BuildDate={{ .CommitDate }}
+      - -X github.com/managedkaos/recall/cmd.BuildEnvironment=goreleaser
+
+archives:
+  - id: recall
+    ids:
+      - recall
+    # Produce names like recall-linux-amd64 / recall-windows-amd64 to match the
+    # existing smoke-test job's expectations.
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  draft: false
+  prerelease: auto

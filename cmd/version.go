@@ -9,7 +9,7 @@ import (
 
 // Package-level variables set via -ldflags at build time.
 var (
-	Version string // Composite version string (reserved for future use)
+	Version string // Full semantic version, injected from the git tag by GoReleaser.
 	Major   string
 	Minor   string
 	Patch   string
@@ -22,7 +22,7 @@ var (
 // runVersion prints the build/version metadata. Invoked by the root command's
 // --version / -v flag.
 func runVersion(cmd *cobra.Command, args []string) error {
-	meta := buildinfo.Collect(Major, Minor, Patch, GitBranch, BuildEnvironment, BuildDate)
+	meta := buildinfo.Collect(Version, Major, Minor, Patch, GitBranch, BuildEnvironment, BuildDate)
 	fmt.Print(meta.String())
 	return nil
 }

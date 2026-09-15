@@ -226,6 +226,43 @@ tags: docker, devops, containers
 
 Tags enable filtering with `recall -l --tag <tag>`.
 
+## Releasing
+
+Releases are produced by [GoReleaser](https://goreleaser.com). **The git tag is
+the authoritative version.** To cut a release, push a semantic-version tag (or
+run the "Build and Release Binary" workflow manually with a tag input):
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The release workflow then:
+
+1. **Builds** all five platform archives with GoReleaser, injecting the tag as
+   the binary version (`recall -v` reports `1.2.3`).
+2. **Smoke-tests** every archive on its native runner by extracting it and
+   running `recall --version`.
+3. **Publishes** a GitHub release with the archives, a `checksums.txt`, and
+   auto-generated release notes — only after the smoke tests pass.
+4. **Syncs `version.yml`** by opening a pull request that sets `major`, `minor`,
+   and `patch` to match the tag. Because `main` is protected, this arrives as a
+   PR for review rather than a direct push.
+
+`version.yml` remains the source of truth for **local** `make` builds, which
+compose the version from its components. Release builds prefer the tag-injected
+version, so the two stay consistent via the sync PR.
+
+### Local release dry run
+
+Build the full set of release archives locally (no publishing) with GoReleaser:
+
+```bash
+make snapshot
+```
+
+This requires GoReleaser to be installed and writes artifacts to `dist/`.
+
 ## Supported Platforms
 
 - Linux (amd64, arm64)
