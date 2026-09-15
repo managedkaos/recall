@@ -123,6 +123,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
 
       # Parse vX.Y.Z (from the tag ref or the dispatch input) into components
       # and rewrite version.yml. main is a protected branch, so changes are
