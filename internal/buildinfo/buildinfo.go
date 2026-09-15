@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 // Metadata holds build and version information for the recall binary.
@@ -29,16 +30,40 @@ func FormatVersion(major, minor, patch string) string {
 	return major + "." + minor + "." + patch
 }
 
-// Collect gathers build metadata from embedded build info and ldflags fallbacks.
-func Collect(major, minor, patch, gitBranch, buildEnv, buildDate string) Metadata {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return mergeMetadata(major, minor, patch, gitBranch, buildEnv, buildDate, nil)
+// ResolveVersion determines the version string using a precedence order:
+//  1. an explicit version (e.g. injected from a git tag by GoReleaser), with a
+//     single leading "v" or "V" stripped; any pre-release/build-metadata suffix
+//     (e.g. "-alpha+meta") is preserved;
+//  2. a version composed from major/minor/patch components (local make builds);
+//  3. "unknown" when nothing is available.
+//
+// This lets tag-driven release builds inject a single version while local
+// builds continue to compose the version from version.yml components.
+func ResolveVersion(version, major, minor, patch string) string {
+	if v := strings.TrimSpace(version); v != "" {
+		v = strings.TrimPrefix(v, "v")
+		v = strings.TrimPrefix(v, "V")
+		// Fall through to composed components when the explicit value is only a
+		// "v"/"V" prefix (or whitespace) and thus empty after stripping.
+		if v != "" {
+			return v
+		}
 	}
-	return mergeMetadata(major, minor, patch, gitBranch, buildEnv, buildDate, info)
+	return FormatVersion(major, minor, patch)
 }
 
-func mergeMetadata(major, minor, patch, gitBranch, buildEnv, buildDate string, info *debug.BuildInfo) Metadata {
+// Collect gathers build metadata from embedded build info and ldflags fallbacks.
+// version, when non-empty, takes precedence over the major/minor/patch
+// components (see ResolveVersion).
+func Collect(version, major, minor, patch, gitBranch, buildEnv, buildDate string) Metadata {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return mergeMetadata(version, major, minor, patch, gitBranch, buildEnv, buildDate, nil)
+	}
+	return mergeMetadata(version, major, minor, patch, gitBranch, buildEnv, buildDate, info)
+}
+
+func mergeMetadata(version, major, minor, patch, gitBranch, buildEnv, buildDate string, info *debug.BuildInfo) Metadata {
 	goos := settingValue(info, "GOOS")
 	goarch := settingValue(info, "GOARCH")
 	if goos == "" {
@@ -72,7 +97,7 @@ func mergeMetadata(major, minor, patch, gitBranch, buildEnv, buildDate string, i
 	}
 
 	return Metadata{
-		Version:     FormatVersion(major, minor, patch),
+		Version:     ResolveVersion(version, major, minor, patch),
 		GoVersion:   goVersion,
 		Platform:    platform,
 		Built:       firstNonEmpty(settingValue(info, "vcs.time"), buildDate),

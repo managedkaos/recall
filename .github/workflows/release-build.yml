@@ -13,13 +13,13 @@ on:
 
 jobs:
   build:
-    name: Build binaries
+    name: Build binaries (snapshot for testing)
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0 # GoReleaser needs full history and tags
 
       - name: Set up Go
         uses: actions/setup-go@v6.5.0
@@ -36,28 +36,31 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Build Binaries
-        env:
-          BUILD_ENV: GitHub Actions
-          GIT_BRANCH: ${{ github.ref_name }}
-          BUILD_DATE: ${{ github.event.head_commit.timestamp }}
-        run: make build-all
+      # Build the archives with GoReleaser in snapshot mode so we get the exact
+      # artifacts that will ship, without publishing anything yet. The publish
+      # happens in the release job only after the smoke test passes.
+      - name: Build release artifacts (snapshot)
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean
 
       - name: Show build artifacts
-        run: ls -la bin || true
+        run: ls -la dist || true
 
-      - name: Upload build artifacts
+      - name: Upload dist artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: bin
-          path: bin
+          name: dist
+          path: dist
 
   test:
     name: Test built binaries
     needs: build
     uses: ./.github/workflows/test-binaries.yml
     with:
-      artifact_name: bin
+      artifact_name: dist
       binary_name: recall
 
   release:
@@ -69,22 +72,104 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7.0.0
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8.0.1
         with:
-          name: bin
-          path: bin
+          # Check out the exact tag being released for both triggers: the tag
+          # ref on push, or the dispatch input tag. GoReleaser derives the
+          # version from this ref.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          fetch-depth: 0 # GoReleaser needs full history and tags
 
-      - name: Create Release and Upload Binaries
+      - name: Set up Go
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version: '1.26'
+
+      - name: Cache Go modules
+        uses: actions/cache@v5.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      # Publish the release. GoReleaser rebuilds the artifacts deterministically
+      # (-trimpath) from the tagged commit and creates the GitHub release with
+      # archives, checksums, and generated changelog.
+      - name: Publish release
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-version:
+    name: Sync version.yml to the released tag
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # Never race two syncs; a newer release supersedes an in-flight one.
+    concurrency:
+      group: sync-version
+      cancel-in-progress: false
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7.0.0
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # Parse vX.Y.Z (from the tag ref or the dispatch input) into components
+      # and rewrite version.yml. main is a protected branch, so changes are
+      # proposed via a pull request rather than pushed directly.
+      - name: Rewrite version.yml from tag
+        id: rewrite
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          if [ -z "${TAG:-}" ]; then
-            echo "Tag is empty; aborting."
-            exit 1
+          # Strip a leading v/V and any pre-release/build-metadata suffix.
+          VER="${TAG#[vV]}"
+          VER="${VER%%-*}"
+          VER="${VER%%+*}"
+          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag '$TAG' is not a semantic version (parsed '$VER'); skipping sync."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "Creating release for $TAG and uploading bin/*"
-          gh release create "$TAG" bin/* --title "Release $TAG" --generate-notes
+          MAJOR="${VER%%.*}"
+          REST="${VER#*.}"
+          MINOR="${REST%%.*}"
+          PATCH="${REST#*.}"
+          printf 'major: %s\nminor: %s\npatch: %s\n' "$MAJOR" "$MINOR" "$PATCH" > version.yml
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if git diff --quiet -- version.yml; then
+            echo "version.yml already at $VER; nothing to sync."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request to sync version.yml
+        if: steps.rewrite.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7.0.8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: chore/sync-version-${{ steps.rewrite.outputs.version }}
+          commit-message: "chore: sync version.yml to ${{ steps.rewrite.outputs.version }}"
+          title: "chore: sync version.yml to ${{ steps.rewrite.outputs.version }}"
+          body: |
+            Automated sync of `version.yml` to match the released tag
+            `${{ steps.rewrite.outputs.version }}`.
+
+            The git tag is the authoritative version; this keeps `version.yml`
+            (used by local `make` builds) in sync with the latest release.
+          labels: automated, version-sync
+          delete-branch: true
+

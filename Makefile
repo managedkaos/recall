@@ -42,9 +42,14 @@ build-all: ## Build for all target platforms
 test: ## Run all tests
 	go test -v ./...
 
+.PHONY: snapshot
+snapshot: ## Build a local release snapshot with GoReleaser (no publish)
+	@command -v goreleaser >/dev/null 2>&1 || { echo "goreleaser not found; install from https://goreleaser.com/install/"; exit 1; }
+	goreleaser release --snapshot --clean
+
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) dist
 
 .PHONY: install
 install: ## Install the binary to ~/.local/bin
