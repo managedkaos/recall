@@ -16,14 +16,14 @@ BUILD_ENV  ?= local ($(shell uname -s))
 LDFLAGS := -ldflags "-X '$(MODULE)/cmd.Major=$(VERSION_MAJOR)' -X '$(MODULE)/cmd.Minor=$(VERSION_MINOR)' -X '$(MODULE)/cmd.Patch=$(VERSION_PATCH)' -X '$(MODULE)/cmd.GitBranch=$(GIT_BRANCH)' -X '$(MODULE)/cmd.BuildDate=$(BUILD_DATE)' -X '$(MODULE)/cmd.BuildEnvironment=$(BUILD_ENV)'"
 
 .PHONY: help
-help:
-	@echo coming soon
+help: ## Display available targets
+	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "\033[36m%-28s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 .PHONY: all
-all: clean test build
+all: clean test build ## Clean artifacts, run tests, and build the binary
 
 .PHONY: build
-build: ## Default: build for current platform
+build: ## Build the binary for the current platform
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 
@@ -49,11 +49,9 @@ snapshot: ## Build a local release snapshot with GoReleaser (no publish)
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf $(BUILD_DIR) dist
+	rm -rvf $(BUILD_DIR) dist
 
 .PHONY: install
-install: ## Install the binary to ~/.local/bin
-	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(HOME)/.local/bin
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
-	install -m 0755 $(BUILD_DIR)/$(BINARY_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
+install: snapshot ## Build a snapshot and install the darwin_amd64 binary to ~/.local/bin
+	@mkdir -p "$(HOME)/.local/bin"
+	install -m 0755 "dist/$(BINARY_NAME)_darwin_amd64_v1/$(BINARY_NAME)" "$(HOME)/.local/bin/$(BINARY_NAME)"
