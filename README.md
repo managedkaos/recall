@@ -158,6 +158,39 @@ Generate a completion script for your shell (`bash`, `zsh`, `fish`, or
 recall -c bash > /etc/bash_completion.d/recall
 ```
 
+Once the script is installed, pressing `<TAB>` completes the names of your
+stored recall files. Completion is dynamic — it reads the current recall
+directory (honoring `RECALL_DIR`) each time, so newly created files are
+available immediately without regenerating the script:
+
+```bash
+recall doc<TAB>        # completes to stored files beginning with "doc"
+recall -e doc<TAB>     # same completion when editing
+recall -m doc<TAB>     # metadata accepts multiple names; keeps completing
+```
+
+Completion is context-aware:
+
+- The default lookup and `--edit`, `--raw`, and `--metadata` complete stored
+  file names.
+- `--completion` / `-c` completes the shell name (`bash`, `zsh`, `fish`,
+  `powershell`).
+- `--search` takes a free-text query, and `--list`, `--init`, and `--version`
+  take no filename, so none of these offer file-name candidates.
+
+Install the script for your shell in the usual location. For example:
+
+```bash
+# bash (Linux)
+recall -c bash | sudo tee /etc/bash_completion.d/recall > /dev/null
+
+# zsh (place on your $fpath, e.g. ~/.zsh/completions/_recall)
+recall -c zsh > ~/.zsh/completions/_recall
+
+# fish
+recall -c fish > ~/.config/fish/completions/recall.fish
+```
+
 ### Help
 
 ```bash

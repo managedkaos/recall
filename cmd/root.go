@@ -33,8 +33,9 @@ var rootCmd = &cobra.Command{
 	Use:   "recall [filename]",
 	Short: "Store, retrieve, and search markdown reference files",
 	Long:  `Recall is a CLI tool that stores, retrieves, edits, lists, and searches markdown-formatted reference files from the command line.`,
-	Args:  cobra.ArbitraryArgs,
-	RunE:  runRecall,
+	Args:              cobra.ArbitraryArgs,
+	ValidArgsFunction: completeArgs,
+	RunE:              runRecall,
 }
 
 func init() {
@@ -55,6 +56,11 @@ func init() {
 	f.StringVar(&tagFlag, "tag", "", "filter --list by tag (case-insensitive)")
 	f.StringVar(&initPath, "init-path", "", "with --init, initialize the given directory instead of the default")
 	f.BoolVarP(&jsonFlag, "json", "j", false, "with --metadata, output the report as JSON")
+
+	// Complete the shell name for --completion / -c.
+	_ = rootCmd.RegisterFlagCompletionFunc("completion", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"bash", "zsh", "fish", "powershell"}, cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 // runRecall is the single dispatch point for the recall command. It enforces
