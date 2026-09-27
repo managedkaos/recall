@@ -206,3 +206,26 @@ func TestCreate_InvalidPath(t *testing.T) {
 		t.Fatal("expected error for invalid directory")
 	}
 }
+
+func TestCreateWithFrontmatter_WritesScaffold(t *testing.T) {
+	tmp := t.TempDir()
+
+	if err := storage.CreateWithFrontmatter(tmp, "newnote"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(tmp, "newnote"))
+	if err != nil {
+		t.Fatalf("file was not created: %v", err)
+	}
+	if string(got) != storage.FrontmatterScaffold {
+		t.Errorf("expected scaffold %q, got %q", storage.FrontmatterScaffold, got)
+	}
+}
+
+func TestCreateWithFrontmatter_InvalidPath(t *testing.T) {
+	err := storage.CreateWithFrontmatter("/nonexistent/path/xyz", "file")
+	if err == nil {
+		t.Fatal("expected error for invalid directory")
+	}
+}

@@ -2,71 +2,50 @@ package frontmatter
 
 import (
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
-func TestParseTagLine(t *testing.T) {
+// TestMetaUnmarshal verifies the data model unmarshals both inline and block
+// list forms of the tags field.
+func TestMetaUnmarshal(t *testing.T) {
 	tests := []struct {
 		name string
-		line string
+		yaml string
 		want []string
 	}{
 		{
-			name: "simple tags",
-			line: " go, testing, concurrency",
-			want: []string{"go", "testing", "concurrency"},
-		},
-		{
-			name: "consecutive commas",
-			line: " go,, testing",
+			name: "inline list",
+			yaml: "tags: [go, testing]",
 			want: []string{"go", "testing"},
 		},
 		{
-			name: "trailing comma",
-			line: " go, testing,",
+			name: "block list",
+			yaml: "tags:\n  - go\n  - testing",
 			want: []string{"go", "testing"},
 		},
 		{
-			name: "leading comma",
-			line: ", go, testing",
-			want: []string{"go", "testing"},
-		},
-		{
-			name: "whitespace-only values",
-			line: " go,   , testing",
-			want: []string{"go", "testing"},
-		},
-		{
-			name: "empty string",
-			line: "",
+			name: "no tags key",
+			yaml: "other: value",
 			want: nil,
 		},
 		{
-			name: "only whitespace",
-			line: "   ",
+			name: "empty inline list",
+			yaml: "tags: []",
 			want: nil,
-		},
-		{
-			name: "only commas",
-			line: ",,,",
-			want: nil,
-		},
-		{
-			name: "single tag with spaces",
-			line: "  golang  ",
-			want: []string{"golang"},
-		},
-		{
-			name: "tags with extra internal spaces",
-			line: " my tag , another tag ",
-			want: []string{"my tag", "another tag"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseTagLine(tt.line)
-			if !slicesEqual(got, tt.want) {
-				t.Errorf("ParseTagLine(%q) = %v, want %v", tt.line, got, tt.want)
+			var m meta
+			if err := yaml.Unmarshal([]byte(tt.yaml), &m); err != nil {
+				t.Fatalf("unmarshal error: %v", err)
+			}
+			// Compare via normalizeTags to treat empty/nil uniformly; the model
+			// itself may produce an empty non-nil slice for `tags: []`.
+			if !slicesEqual(normalizeTags(m.Tags), tt.want) {
+				t.Errorf("Tags = %v, want %v", m.Tags, tt.want)
 			}
 		})
 	}
@@ -80,13 +59,19 @@ func TestParse(t *testing.T) {
 		wantBody string
 	}{
 		{
-			name:     "standard front-matter",
-			content:  []byte("tags: go, testing\n# Hello\nWorld"),
+			name:     "inline list front matter",
+			content:  []byte("---\ntags: [go, testing]\n---\n# Hello\nWorld"),
 			wantTags: []string{"go", "testing"},
 			wantBody: "# Hello\nWorld",
 		},
 		{
-			name:     "no front-matter",
+			name:     "block list front matter",
+			content:  []byte("---\ntags:\n  - go\n  - testing\n---\n# Hello"),
+			wantTags: []string{"go", "testing"},
+			wantBody: "# Hello",
+		},
+		{
+			name:     "no front matter",
 			content:  []byte("# Hello\nWorld"),
 			wantTags: nil,
 			wantBody: "# Hello\nWorld",
@@ -104,64 +89,70 @@ func TestParse(t *testing.T) {
 			wantBody: "",
 		},
 		{
-			name:     "tags line only no newline",
-			content:  []byte("tags: go, testing"),
-			wantTags: []string{"go", "testing"},
-			wantBody: "",
-		},
-		{
-			name:     "tags line only with newline",
-			content:  []byte("tags: go, testing\n"),
-			wantTags: []string{"go", "testing"},
-			wantBody: "",
-		},
-		{
-			name:     "case-sensitive prefix - Tags does not match",
-			content:  []byte("Tags: go, testing\n# Hello"),
+			name:     "empty front matter block",
+			content:  []byte("---\n---\n# Body"),
 			wantTags: nil,
-			wantBody: "Tags: go, testing\n# Hello",
+			wantBody: "# Body",
 		},
 		{
-			name:     "case-sensitive prefix - TAGS does not match",
-			content:  []byte("TAGS: go, testing\n# Hello"),
+			name:     "front matter with no tags key",
+			content:  []byte("---\ntitle: Something\n---\nBody"),
 			wantTags: nil,
-			wantBody: "TAGS: go, testing\n# Hello",
-		},
-		{
-			name:     "consecutive commas in front-matter",
-			content:  []byte("tags: go,, testing\nBody"),
-			wantTags: []string{"go", "testing"},
 			wantBody: "Body",
 		},
 		{
-			name:     "trailing comma in front-matter",
-			content:  []byte("tags: go, testing,\nBody"),
-			wantTags: []string{"go", "testing"},
-			wantBody: "Body",
-		},
-		{
-			name:     "whitespace-only tag values",
-			content:  []byte("tags: go,   , testing\nBody"),
-			wantTags: []string{"go", "testing"},
-			wantBody: "Body",
-		},
-		{
-			name:     "tags prefix without space",
-			content:  []byte("tags:go, testing\nBody"),
-			wantTags: []string{"go", "testing"},
-			wantBody: "Body",
-		},
-		{
-			name:     "line starting with tags but not prefix",
-			content:  []byte("tagster: something\nBody"),
+			name:     "empty tags list",
+			content:  []byte("---\ntags: []\n---\nBody"),
 			wantTags: nil,
-			wantBody: "tagster: something\nBody",
+			wantBody: "Body",
+		},
+		{
+			name:     "unterminated block returns original content",
+			content:  []byte("---\ntags: [go]\n# never closed"),
+			wantTags: nil,
+			wantBody: "---\ntags: [go]\n# never closed",
+		},
+		{
+			name:     "lone delimiter no newline",
+			content:  []byte("---"),
+			wantTags: nil,
+			wantBody: "---",
 		},
 		{
 			name:     "body preserves multiple lines",
-			content:  []byte("tags: go\nline1\nline2\nline3"),
+			content:  []byte("---\ntags: [go]\n---\nline1\nline2\nline3"),
 			wantTags: []string{"go"},
 			wantBody: "line1\nline2\nline3",
+		},
+		{
+			name:     "closing delimiter at end no trailing body",
+			content:  []byte("---\ntags: [go]\n---\n"),
+			wantTags: []string{"go"},
+			wantBody: "",
+		},
+		{
+			name:     "closing delimiter at end no newline",
+			content:  []byte("---\ntags: [go]\n---"),
+			wantTags: []string{"go"},
+			wantBody: "",
+		},
+		{
+			name:     "clean break: old leading tags line is body",
+			content:  []byte("tags: go, testing\n# Hello"),
+			wantTags: nil,
+			wantBody: "tags: go, testing\n# Hello",
+		},
+		{
+			name:     "CRLF line endings",
+			content:  []byte("---\r\ntags: [go, testing]\r\n---\r\n# Hello\r\nWorld"),
+			wantTags: []string{"go", "testing"},
+			wantBody: "# Hello\r\nWorld",
+		},
+		{
+			name:     "tags with surrounding whitespace",
+			content:  []byte("---\ntags: [\" go \", \"testing \"]\n---\nBody"),
+			wantTags: []string{"go", "testing"},
+			wantBody: "Body",
 		},
 	}
 

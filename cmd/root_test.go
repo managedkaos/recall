@@ -82,8 +82,8 @@ func setupRecallDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// File with front-matter
-	err := os.WriteFile(filepath.Join(dir, "hello"), []byte("tags: greeting\nHello, world!\n"), 0o644)
+	// File with YAML front-matter
+	err := os.WriteFile(filepath.Join(dir, "hello"), []byte("---\ntags: [greeting]\n---\nHello, world!\n"), 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +241,60 @@ func TestRawFlag_FileWithoutFrontmatter(t *testing.T) {
 	}
 }
 
+// --- Show front matter flag --------------------------------------------------
+
+func TestShowFrontmatter_DefaultStrips(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--raw", "hello")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if strings.Contains(stdout, "tags:") || strings.Contains(stdout, "---") {
+		t.Errorf("expected front matter stripped by default, got %q", stdout)
+	}
+	if stdout != "Hello, world!\n" {
+		t.Errorf("expected body only, got %q", stdout)
+	}
+}
+
+func TestShowFrontmatter_IncludesBlock(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	for _, args := range [][]string{{"--raw", "--show-frontmatter", "hello"}, {"--raw", "-f", "hello"}} {
+		stdout, _, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 0 {
+			t.Errorf("%v: expected exit code 0, got %d", args, exitCode)
+		}
+		expected := "---\ntags: [greeting]\n---\nHello, world!\n"
+		if stdout != expected {
+			t.Errorf("%v: expected full raw content %q, got %q", args, expected, stdout)
+		}
+	}
+}
+
+func TestShowFrontmatter_WithActionFlagErrors(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	pairs := [][]string{
+		{"-m", "-f", "hello"},
+		{"--list", "--show-frontmatter"},
+		{"-s", "-f", "hello"},
+	}
+	for _, args := range pairs {
+		_, stderr, exitCode := runRecall(t, binPath, recallDir, args...)
+		if exitCode != 1 {
+			t.Errorf("%v: expected exit code 1, got %d", args, exitCode)
+		}
+		if !strings.Contains(stderr, "--show-frontmatter is only valid when displaying a file") {
+			t.Errorf("%v: expected '--show-frontmatter is only valid' error, got stderr: %q", args, stderr)
+		}
+	}
+}
+
 // --- Edit flag ---------------------------------------------------------------
 
 func TestEditFlag_NoArgErrors(t *testing.T) {
@@ -267,8 +321,37 @@ func TestEditFlag_CreatesAndOpensFile(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("expected --edit to succeed, got err %v\n%s", err, out)
 	}
-	if _, err := os.Stat(filepath.Join(recallDir, "newnote")); err != nil {
-		t.Errorf("expected file 'newnote' to be created, stat err: %v", err)
+	got, err := os.ReadFile(filepath.Join(recallDir, "newnote"))
+	if err != nil {
+		t.Fatalf("expected file 'newnote' to be created, read err: %v", err)
+	}
+	expected := "---\ntags: []\n---\n\n"
+	if string(got) != expected {
+		t.Errorf("expected new file scaffolded with %q, got %q", expected, got)
+	}
+}
+
+func TestEditFlag_DoesNotOverwriteExisting(t *testing.T) {
+	binPath := buildBinary(t)
+	recallDir := setupRecallDir(t)
+
+	before, err := os.ReadFile(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(binPath, "--edit", "hello")
+	cmd.Env = append(os.Environ(), "RECALL_DIR="+recallDir, "EDITOR=true")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("expected --edit to succeed, got err %v\n%s", err, out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(recallDir, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("expected existing file to be unchanged; before %q after %q", before, after)
 	}
 }
 
@@ -540,7 +623,7 @@ func TestHelp_ListsAllFlagsNoSubcommands(t *testing.T) {
 		"-e, --edit", "-s, --search", "-l, --list",
 		"-i, --init", "-v, --version", "-c, --completion",
 		"-r, --raw", "--tag", "--init-path",
-		"-m, --metadata", "-j, --json",
+		"-m, --metadata", "-j, --json", "-f, --show-frontmatter",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("expected help to list %q, got:\n%s", want, stdout)

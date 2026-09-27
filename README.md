@@ -60,6 +60,14 @@ Output the unformatted markdown with `-r` / `--raw`:
 recall -r docker
 ```
 
+By default the YAML front matter block is stripped from both rendered and raw
+output. Include it with `-f` / `--show-frontmatter`:
+
+```bash
+recall -f docker
+recall -r -f docker
+```
+
 Because there are no subcommands, any name is a valid filename — including
 names like `list` or `search`.
 
@@ -171,8 +179,8 @@ recall -m doc<TAB>     # metadata accepts multiple names; keeps completing
 
 Completion is context-aware:
 
-- The default lookup and `--edit`, `--raw`, and `--metadata` complete stored
-  file names.
+- The default lookup and `--edit`, `--raw`, `--metadata`, and
+  `--show-frontmatter` complete stored file names.
 - `--completion` / `-c` completes the shell name (`bash`, `zsh`, `fish`,
   `powershell`).
 - `--search` takes a free-text query, and `--list`, `--init`, and `--version`
@@ -213,16 +221,35 @@ export EDITOR=vim
 
 ## File Format
 
-Recall files are plain text with markdown content and no `.md` extension. Optionally, the first line can contain tags:
+Recall files are plain text with markdown content and no `.md` extension.
+Optionally, tags can be declared in a YAML front matter block at the top of the
+file, delimited by `---`:
 
 ```
-tags: docker, devops, containers
+---
+tags: [docker, devops, containers]
+---
 # Docker Cheatsheet
 
 ## Running Containers
 - `docker run -d --name myapp nginx`
 - `docker ps -a`
 ```
+
+The `tags` field accepts both inline (`tags: [a, b]`) and block list forms:
+
+```
+---
+tags:
+  - docker
+  - devops
+---
+```
+
+The front matter block is standard YAML, so files remain acceptable to markdown
+linters. It is stripped from rendered and raw output by default; use
+`-f` / `--show-frontmatter` to include it. New files created with `recall -e`
+are scaffolded with an empty `tags: []` block.
 
 Tags enable filtering with `recall -l --tag <tag>`.
 

@@ -43,7 +43,8 @@ func completeRecallFiles(toComplete string) ([]string, cobra.ShellCompDirective)
 //     value), so no candidates are offered here.
 //   - --search: the argument is a free-text query, not a filename, so no
 //     candidates are offered.
-//   - default, --edit, --raw, --metadata: complete stored recall file names.
+//   - default, --edit, --raw, --metadata, --show-frontmatter: complete stored
+//     recall file names.
 //
 // In every case ShellCompDirectiveNoFileComp is returned so the shell does not
 // fall back to filesystem path completion.
