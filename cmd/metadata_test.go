@@ -19,7 +19,8 @@ func writeTempFile(t *testing.T, name, content string) (dir string) {
 }
 
 func TestCollectMetadata_TaggedFile(t *testing.T) {
-	dir := writeTempFile(t, "docker", "tags: docker, devops\n# Docker\nbody\n")
+	content := "---\ntags: [docker, devops]\n---\n# Docker\nbody\n"
+	dir := writeTempFile(t, "docker", content)
 
 	md, err := collectMetadata(dir, "docker")
 	if err != nil {
@@ -32,7 +33,7 @@ func TestCollectMetadata_TaggedFile(t *testing.T) {
 	if !filepath.IsAbs(md.Path) {
 		t.Errorf("expected absolute Path, got %q", md.Path)
 	}
-	wantSize := int64(len("tags: docker, devops\n# Docker\nbody\n"))
+	wantSize := int64(len(content))
 	if md.SizeBytes != wantSize {
 		t.Errorf("expected SizeBytes %d, got %d", wantSize, md.SizeBytes)
 	}
@@ -78,7 +79,7 @@ func TestRenderJSON_EmptySliceEmitsEmptyArray(t *testing.T) {
 }
 
 func TestRenderJSON_PopulatedRoundTrips(t *testing.T) {
-	dir := writeTempFile(t, "docker", "tags: docker\n# Docker\n")
+	dir := writeTempFile(t, "docker", "---\ntags: [docker]\n---\n# Docker\n")
 	md, err := collectMetadata(dir, "docker")
 	if err != nil {
 		t.Fatal(err)

@@ -204,6 +204,28 @@ func TestSearch_GroupedByFile(t *testing.T) {
 	}
 }
 
+func TestSearch_MatchesFrontMatter(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "doc", "---\ntags: [docker, devops]\n---\n# Docker\nbody")
+
+	results, err := Search(dir, "devops")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 file result, got %d", len(results))
+	}
+	if results[0].Filename != "doc" {
+		t.Errorf("expected filename 'doc', got %q", results[0].Filename)
+	}
+	if len(results[0].Matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(results[0].Matches))
+	}
+	if results[0].Matches[0].LineNum != 2 {
+		t.Errorf("expected match on line 2 (front matter), got line %d", results[0].Matches[0].LineNum)
+	}
+}
+
 // writeFile is a helper to create a test file.
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()

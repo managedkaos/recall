@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/spf13/cobra v1.10.2
+	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rapid v1.3.0
 )
 

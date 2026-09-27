@@ -62,3 +62,15 @@ func Create(dir string, name string) error {
 	}
 	return f.Close()
 }
+
+// FrontmatterScaffold is the initial content written to newly created files:
+// an empty YAML front matter block followed by a blank line so the body starts
+// cleanly.
+const FrontmatterScaffold = "---\ntags: []\n---\n\n"
+
+// CreateWithFrontmatter creates a new file pre-populated with an empty YAML
+// front matter block. It is used when creating a file for editing so new files
+// are consistent with the front matter format.
+func CreateWithFrontmatter(dir string, name string) error {
+	return os.WriteFile(FilePath(dir, name), []byte(FrontmatterScaffold), 0o644)
+}

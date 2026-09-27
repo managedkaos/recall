@@ -33,7 +33,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	if !storage.Exists(dir, filename) {
-		if err := storage.Create(dir, filename); err != nil {
+		if err := storage.CreateWithFrontmatter(dir, filename); err != nil {
 			fmt.Fprintln(os.Stderr, fmt.Sprintf("recall: cannot create file %s: %v", filename, err))
 			os.Exit(1)
 		}

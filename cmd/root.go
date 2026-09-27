@@ -23,10 +23,11 @@ var (
 	metadataFlag   bool
 
 	// Modifiers
-	rawFlag  bool
-	tagFlag  string
-	initPath string
-	jsonFlag bool
+	rawFlag             bool
+	tagFlag             string
+	initPath            string
+	jsonFlag            bool
+	showFrontmatterFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -56,6 +57,7 @@ func init() {
 	f.StringVar(&tagFlag, "tag", "", "filter --list by tag (case-insensitive)")
 	f.StringVar(&initPath, "init-path", "", "with --init, initialize the given directory instead of the default")
 	f.BoolVarP(&jsonFlag, "json", "j", false, "with --metadata, output the report as JSON")
+	f.BoolVarP(&showFrontmatterFlag, "show-frontmatter", "f", false, "when rendering a file, include the YAML front matter block instead of stripping it")
 
 	// Complete the shell name for --completion / -c.
 	_ = rootCmd.RegisterFlagCompletionFunc("completion", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -88,6 +90,12 @@ func runRecall(cmd *cobra.Command, args []string) error {
 	// --json requires --metadata.
 	if jsonFlag && !metadataFlag {
 		fmt.Fprintln(os.Stderr, "recall: --json requires --metadata")
+		os.Exit(1)
+	}
+
+	// --show-frontmatter is only valid on the default render path (no action flag).
+	if showFrontmatterFlag && (editFlag || searchFlag || listFlag || initFlag || versionFlag || completionFlag != "" || metadataFlag) {
+		fmt.Fprintln(os.Stderr, "recall: --show-frontmatter is only valid when displaying a file")
 		os.Exit(1)
 	}
 
@@ -132,9 +140,10 @@ func runRecall(cmd *cobra.Command, args []string) error {
 }
 
 // renderFile reads the named recall file, strips front-matter, and writes it to
-// stdout. With --raw set, the body is written unmodified; otherwise it is
-// rendered with ANSI styling. A missing file exits with a non-zero code and no
-// output.
+// stdout. With --raw set, the content is written unmodified; otherwise it is
+// rendered with ANSI styling. With --show-frontmatter set, the YAML front
+// matter block is included rather than stripped. A missing file exits with a
+// non-zero code and no output.
 func renderFile(filename string) error {
 	dir, err := config.RecallDir()
 	if err != nil {
@@ -157,16 +166,20 @@ func renderFile(filename string) error {
 		os.Exit(1)
 	}
 
-	// Strip front-matter
+	// Strip front-matter unless the caller asked to see it.
 	_, body := frontmatter.Parse(content)
+	display := body
+	if showFrontmatterFlag {
+		display = content
+	}
 
-	// Raw output: write body directly without rendering
+	// Raw output: write the selected content directly without rendering.
 	if rawFlag {
-		os.Stdout.Write(body)
+		os.Stdout.Write(display)
 		return nil
 	}
 
-	output, err := renderer.Render(body)
+	output, err := renderer.Render(display)
 	if err != nil {
 		os.Exit(1)
 	}
