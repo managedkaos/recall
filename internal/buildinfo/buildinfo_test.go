@@ -6,82 +6,35 @@ import (
 	"testing"
 )
 
-func TestFormatVersion_AllPopulated(t *testing.T) {
-	got := FormatVersion("0", "1", "0")
-	if got != "0.1.0" {
-		t.Errorf("expected '0.1.0', got %q", got)
-	}
-}
-
-func TestFormatVersion_LargeNumbers(t *testing.T) {
-	got := FormatVersion("12", "34", "56")
-	if got != "12.34.56" {
-		t.Errorf("expected '12.34.56', got %q", got)
-	}
-}
-
-func TestFormatVersion_EmptyMajor(t *testing.T) {
-	got := FormatVersion("", "1", "0")
-	if got != "unknown" {
-		t.Errorf("expected 'unknown', got %q", got)
-	}
-}
-
-func TestFormatVersion_EmptyMinor(t *testing.T) {
-	got := FormatVersion("0", "", "0")
-	if got != "unknown" {
-		t.Errorf("expected 'unknown', got %q", got)
-	}
-}
-
-func TestFormatVersion_EmptyPatch(t *testing.T) {
-	got := FormatVersion("0", "1", "")
-	if got != "unknown" {
-		t.Errorf("expected 'unknown', got %q", got)
-	}
-}
-
-func TestFormatVersion_AllEmpty(t *testing.T) {
-	got := FormatVersion("", "", "")
-	if got != "unknown" {
-		t.Errorf("expected 'unknown', got %q", got)
-	}
-}
-
 func TestResolveVersion(t *testing.T) {
-	tests := []struct {
-		name                       string
-		version, major, minor, pat string
-		want                       string
-	}{
-		{"explicit version wins over components", "2.3.4", "0", "1", "0", "2.3.4"},
-		{"explicit version strips leading v", "v2.3.4", "0", "1", "0", "2.3.4"},
-		{"explicit version strips leading uppercase V", "V2.3.4", "0", "1", "0", "2.3.4"},
-		{"preserves prerelease and build metadata", "v1.2.3-alpha+meta", "", "", "", "1.2.3-alpha+meta"},
-		{"bare v falls back to components", "v", "0", "1", "0", "0.1.0"},
-		{"bare V with whitespace falls back to unknown", "  V  ", "", "", "", "unknown"},
-		{"explicit version trims whitespace", "  1.2.3  ", "", "", "", "1.2.3"},
-		{"falls back to components when version empty", "", "0", "1", "0", "0.1.0"},
-		{"components with large numbers", "", "12", "34", "56", "12.34.56"},
-		{"unknown when version empty and a component empty", "", "0", "", "0", "unknown"},
-		{"unknown when everything empty", "", "", "", "", "unknown"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ResolveVersion(tc.version, tc.major, tc.minor, tc.pat)
-			if got != tc.want {
-				t.Errorf("ResolveVersion(%q,%q,%q,%q) = %q, want %q",
-					tc.version, tc.major, tc.minor, tc.pat, got, tc.want)
+	for _, tc := range []struct{ version, want string }{
+		{"2.3.4", "2.3.4"},
+		{"v2.3.4", "2.3.4"},
+		{"V2.3.4", "2.3.4"},
+		{"  v1.2.3  ", "1.2.3"},
+		{"v1.2.3-alpha+meta", "1.2.3-alpha+meta"},
+		{"v1.2.3-4-gabc1234", "1.2.3-4-gabc1234"},
+		{"v1.2.3-local", "1.2.3-local"},
+		{"v1.2.3-4-gabc1234-local", "1.2.3-4-gabc1234-local"},
+		{"v2026.09.15-1", "2026.09.15-1"},
+		{"vV1.2.3", "V1.2.3"},
+		{"v", "unknown"},
+		{" V ", "unknown"},
+		{"", "unknown"},
+		{"  ", "unknown"},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			if got := ResolveVersion(tc.version); got != tc.want {
+				t.Errorf("ResolveVersion(%q) = %q, want %q", tc.version, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestMergeMetadata_ExplicitVersionWins(t *testing.T) {
-	// An explicit (tag-injected) version must override the components.
-	got := mergeMetadata("v9.9.9", "0", "1", "0", "main", "goreleaser", "2026-01-01T00:00:00Z", nil)
+func TestMergeMetadata_InjectedVersion(t *testing.T) {
+	got := mergeMetadata("v9.9.9", "main", "goreleaser", "2026-01-01T00:00:00Z", nil)
 	if got.Version != "9.9.9" {
-		t.Errorf("expected explicit version 9.9.9, got %q", got.Version)
+		t.Errorf("expected version 9.9.9, got %q", got.Version)
 	}
 }
 
@@ -101,7 +54,7 @@ func TestMergeMetadata_UsesBuildInfoSettings(t *testing.T) {
 		},
 	}
 
-	got := mergeMetadata("", "0", "1", "0", "main", "GitHub Actions", "2026-01-01T00:00:00Z", info)
+	got := mergeMetadata("0.1.0", "main", "GitHub Actions", "2026-01-01T00:00:00Z", info)
 
 	if got.Version != "0.1.0" {
 		t.Errorf("expected version 0.1.0, got %q", got.Version)
@@ -136,7 +89,7 @@ func TestMergeMetadata_UsesBuildInfoSettings(t *testing.T) {
 }
 
 func TestMergeMetadata_FallsBackToLdflags(t *testing.T) {
-	got := mergeMetadata("", "0", "1", "0", "feature/test", "local (Darwin)", "2026-07-21T12:00:00Z", nil)
+	got := mergeMetadata("0.1.0", "feature/test", "local (Darwin)", "2026-07-21T12:00:00Z", nil)
 
 	if got.Built != "2026-07-21T12:00:00Z" {
 		t.Errorf("expected Built from ldflags, got %q", got.Built)
@@ -156,7 +109,7 @@ func TestMergeMetadata_FallsBackToLdflags(t *testing.T) {
 }
 
 func TestMergeMetadata_MissingLdflagsAreUnknown(t *testing.T) {
-	got := mergeMetadata("", "", "", "", "", "", "", nil)
+	got := mergeMetadata("", "", "", "", nil)
 
 	if got.Version != "unknown" {
 		t.Errorf("expected version unknown, got %q", got.Version)

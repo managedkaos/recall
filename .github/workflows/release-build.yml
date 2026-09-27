@@ -19,6 +19,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7.0.0
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0 # GoReleaser needs full history and tags
 
       - name: Set up Go
@@ -36,9 +37,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Build the archives with GoReleaser in snapshot mode so we get the exact
-      # artifacts that will ship, without publishing anything yet. The publish
-      # happens in the release job only after the smoke test passes.
+      # Test archives from the requested tag using snapshot version metadata.
+      # The release job rebuilds with the release version after smoke tests pass.
       - name: Build release artifacts (snapshot)
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
@@ -94,8 +94,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Publish the release. GoReleaser rebuilds the artifacts deterministically
-      # (-trimpath) from the tagged commit and creates the GitHub release with
+      # Publish the release. GoReleaser rebuilds with release version metadata
+      # from the tagged commit and creates the GitHub release with
       # archives, checksums, and generated changelog.
       - name: Publish release
         uses: goreleaser/goreleaser-action@v6.4.0
@@ -105,72 +105,3 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  sync-version:
-    name: Sync version.yml to the released tag
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    # Never race two syncs; a newer release supersedes an in-flight one.
-    concurrency:
-      group: sync-version
-      cancel-in-progress: false
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v7.0.0
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      # Parse vX.Y.Z (from the tag ref or the dispatch input) into components
-      # and rewrite version.yml. main is a protected branch, so changes are
-      # proposed via a pull request rather than pushed directly.
-      - name: Rewrite version.yml from tag
-        id: rewrite
-        env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-        run: |
-          set -euo pipefail
-          # Strip a leading v/V and any pre-release/build-metadata suffix.
-          VER="${TAG#[vV]}"
-          VER="${VER%%-*}"
-          VER="${VER%%+*}"
-          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Tag '$TAG' is not a semantic version (parsed '$VER'); skipping sync."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          MAJOR="${VER%%.*}"
-          REST="${VER#*.}"
-          MINOR="${REST%%.*}"
-          PATCH="${REST#*.}"
-          printf 'major: %s\nminor: %s\npatch: %s\n' "$MAJOR" "$MINOR" "$PATCH" > version.yml
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-          if git diff --quiet -- version.yml; then
-            echo "version.yml already at $VER; nothing to sync."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Open pull request to sync version.yml
-        if: steps.rewrite.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7.0.8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          branch: chore/sync-version-${{ steps.rewrite.outputs.version }}
-          commit-message: "chore: sync version.yml to ${{ steps.rewrite.outputs.version }}"
-          title: "chore: sync version.yml to ${{ steps.rewrite.outputs.version }}"
-          body: |
-            Automated sync of `version.yml` to match the released tag
-            `${{ steps.rewrite.outputs.version }}`.
-
-            The git tag is the authoritative version; this keeps `version.yml`
-            (used by local `make` builds) in sync with the latest release.
-          labels: automated, version-sync
-          delete-branch: true
-

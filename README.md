@@ -239,19 +239,41 @@ git push origin v1.2.3
 
 The release workflow then:
 
-1. **Builds** all five platform archives with GoReleaser, injecting the tag as
-   the binary version (`recall -v` reports `1.2.3`).
-2. **Smoke-tests** every archive on its native runner by extracting it and
-   running `recall --version`.
-3. **Publishes** a GitHub release with the archives, a `checksums.txt`, and
-   auto-generated release notes — only after the smoke tests pass.
-4. **Syncs `version.yml`** by opening a pull request that sets `major`, `minor`,
-   and `patch` to match the tag. Because `main` is protected, this arrives as a
-   PR for review rather than a direct push.
+1. **Builds** all five platform archives from the selected tag with GoReleaser
+   snapshot version metadata.
+2. **Smoke-tests** every archive by extracting it and running `recall --version`.
+3. **Rebuilds and publishes** with the release version (for example, `1.2.3`),
+   a `checksums.txt`, and generated release notes after the smoke tests pass.
 
-`version.yml` remains the source of truth for **local** `make` builds, which
-compose the version from its components. Release builds prefer the tag-injected
-version, so the two stay consistent via the sync PR.
+### Local build versions
+
+`make build` and `make build-all` inject a version from `git describe --tags
+--dirty=-local`, using the nearest reachable tag beginning with a digit, `v` followed
+by a digit, or `V` followed by a digit. Annotated, lightweight, and date-based
+tags are supported. This identifies the code being built, not necessarily the
+latest published release.
+
+| Checkout | `recall --version` first line |
+|---|---|
+| Clean commit tagged `v1.2.3` | `recall version 1.2.3` |
+| Four commits after that tag | `recall version 1.2.3-4-g<hash>` |
+| Tracked files changed or staged | The version above with `-local` appended |
+| No Git, no repository, or no reachable matching tag | `recall version unknown` |
+
+Untracked files do not add `-local`. One leading `v` or `V` is removed from the
+displayed version; prerelease and build suffixes are preserved. Plain `go build`
+and `go run .` do not inject a version and report `unknown`.
+
+Override the version for direct Make builds when needed:
+
+```bash
+make build VERSION=1.2.3-custom
+VERSION=1.2.3-custom make build-all
+```
+
+Command-line overrides take precedence over environment overrides, and both
+bypass Git version detection. An empty override displays `unknown`. Local Make
+builds do not require GoReleaser. CI fetches full history and tags for these builds.
 
 ### Local release dry run
 
@@ -262,6 +284,9 @@ make snapshot
 ```
 
 This requires GoReleaser to be installed and writes artifacts to `dist/`.
+GoReleaser supplies its snapshot version, including the snapshot suffix.
+`make install` installs a GoReleaser snapshot as well. The Make `VERSION`
+override applies only to `build` and `build-all`, not snapshots or installation.
 
 ## Supported Platforms
 

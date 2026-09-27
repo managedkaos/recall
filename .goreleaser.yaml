@@ -2,8 +2,8 @@
 # Docs: https://goreleaser.com
 #
 # The git tag is the authoritative version: {{ .Version }} is the tag with the
-# leading "v" stripped by GoReleaser. It is injected into cmd.Version, which the
-# binary prefers over the version.yml-derived Major/Minor/Patch components.
+# leading "v" stripped by GoReleaser. Releases and snapshots inject cmd.Version;
+# local Make builds inject the same variable using git describe.
 version: 2
 
 project_name: recall
