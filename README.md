@@ -251,7 +251,7 @@ linters. It is stripped from rendered and raw output by default; use
 `-f` / `--show-frontmatter` to include it. New files created with `recall -e`
 are scaffolded with an empty `tags: []` block.
 
-Tags enable filtering with `recall -l --tag <tag>`.
+Tags enable filtering with `recall -l --tag <tag>` or `recall -l -t <tag>`.
 
 ## Releasing
 
@@ -311,6 +311,17 @@ make snapshot
 ```
 
 This requires GoReleaser to be installed and writes artifacts to `dist/`.
+Snapshots and releases generate `man/recall.1` using Cobra's Go documentation
+generator and include it in every release archive. Generated pages are ignored
+by Git. To generate just the manual, run `make man` and preview it with
+`man ./man/recall.1`.
+
+On Linux and macOS, `make install` installs the native snapshot binary to
+`~/.local/bin` and the manual to `~/.local/share/man/man1`. Read it with
+`man recall`; if your system does not search that directory, use
+`man -M ~/.local/share/man recall`. Override `PREFIX`, `BINDIR`, or `MANDIR`
+to choose other installation directories; `DESTDIR` supports staged installs.
+
 GoReleaser supplies its snapshot version, including the snapshot suffix.
 `make install` installs a GoReleaser snapshot as well. The Make `VERSION`
 override applies only to `build` and `build-all`, not snapshots or installation.

@@ -425,14 +425,15 @@ func TestListFlag_FilterByTag(t *testing.T) {
 	binPath := buildBinary(t)
 	recallDir := setupRecallDir(t)
 
-	stdout, _, exitCode := runRecall(t, binPath, recallDir, "--list", "--tag", "greeting")
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-	expected := "hello\n"
-	if stdout != expected {
-		t.Errorf("expected stdout %q, got %q", expected, stdout)
+	for _, flag := range []string{"--tag", "-t"} {
+		stdout, _, exitCode := runRecall(t, binPath, recallDir, "--list", flag, "greeting")
+		if exitCode != 0 {
+			t.Errorf("%s: expected exit code 0, got %d", flag, exitCode)
+		}
+		expected := "hello\n"
+		if stdout != expected {
+			t.Errorf("%s: expected stdout %q, got %q", flag, expected, stdout)
+		}
 	}
 }
 
@@ -622,7 +623,7 @@ func TestHelp_ListsAllFlagsNoSubcommands(t *testing.T) {
 	for _, want := range []string{
 		"-e, --edit", "-s, --search", "-l, --list",
 		"-i, --init", "-v, --version", "-c, --completion",
-		"-r, --raw", "--tag", "--init-path",
+		"-r, --raw", "-t, --tag", "--init-path",
 		"-m, --metadata", "-j, --json", "-f, --show-frontmatter",
 	} {
 		if !strings.Contains(stdout, want) {

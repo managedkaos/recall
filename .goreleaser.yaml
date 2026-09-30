@@ -11,6 +11,7 @@ project_name: recall
 before:
   hooks:
     - go mod tidy
+    - go run ./tools/manpages
 
 builds:
   - id: recall
@@ -48,6 +49,10 @@ archives:
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     formats:
       - tar.gz
+    files:
+      - README.md
+      - LICENSE*
+      - man/*.1
     format_overrides:
       - goos: windows
         formats:
