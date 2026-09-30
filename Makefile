@@ -2,6 +2,9 @@ BINARY_NAME := recall
 BUILD_DIR := bin
 MODULE := github.com/managedkaos/recall
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+PREFIX ?= $(HOME)/.local
+BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man
 
 # Local version from the nearest matching Git tag; environment/CLI overrides win.
 VERSION ?= $(shell git describe --tags --dirty=-local --match 'v[0-9]*' --match 'V[0-9]*' --match '[0-9]*' 2>/dev/null || echo unknown)
@@ -45,11 +48,20 @@ snapshot: ## Build a local release snapshot with GoReleaser (no publish)
 	@command -v goreleaser >/dev/null 2>&1 || { echo "goreleaser not found; install from https://goreleaser.com/install/"; exit 1; }
 	goreleaser release --snapshot --clean
 
+.PHONY: man
+man: ## Generate man pages in ./man using Cobra
+	go run ./tools/manpages
+
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rvf $(BUILD_DIR) dist
+	rm -rvf $(BUILD_DIR) dist man
 
 .PHONY: install
-install: snapshot ## Build a snapshot and install the darwin_amd64 binary to ~/.local/bin
-	@mkdir -p "$(HOME)/.local/bin"
-	install -m 0755 "dist/$(BINARY_NAME)_darwin_amd64_v1/$(BINARY_NAME)" "$(HOME)/.local/bin/$(BINARY_NAME)"
+install: man ## Build a snapshot and install the native binary and man pages (Linux/macOS)
+	@case "$$(uname -s)" in Linux|Darwin) ;; *) echo "install supports Linux and macOS only" >&2; exit 1 ;; esac
+	$(MAKE) snapshot
+	@os_name=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	case "$$(uname -m)" in x86_64|amd64) arch_name=amd64 ;; arm64|aarch64) arch_name=arm64 ;; *) echo "unsupported architecture" >&2; exit 1 ;; esac; \
+	mkdir -p "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(MANDIR)/man1" && \
+	install -m 0755 dist/$(BINARY_NAME)_$${os_name}_$${arch_name}*/$(BINARY_NAME) "$(DESTDIR)$(BINDIR)/$(BINARY_NAME)" && \
+	install -m 0644 man/*.1 "$(DESTDIR)$(MANDIR)/man1/"
