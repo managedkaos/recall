@@ -1,4 +1,4 @@
-name: Build and Release Binary
+name: Build and Release
 
 on:
   push:
@@ -105,3 +105,17 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: release
+    permissions:
+      contents: read
+    uses: managedkaos/homebrew-tap/.github/workflows/update-formula.yml@main
+    with:
+      formula: recall
+      # Same tag the release job built: the pushed tag, or the dispatch input.
+      tag: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    secrets:
+      TAP_APP_ID: ${{ secrets.TAP_APP_ID }}
+      TAP_APP_PRIVATE_KEY: ${{ secrets.TAP_APP_PRIVATE_KEY }}
